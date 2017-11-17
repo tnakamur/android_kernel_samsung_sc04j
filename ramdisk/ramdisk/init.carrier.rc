@@ -1,0 +1,59 @@
+on init
+#carrier
+	export PHONEBOOK_EXCHANGE_PKG_DOCOMO "com.samsung.android.exchange"
+    setprop ro.phonemotion.parameter.path /system/etc/parameter.txt
+
+on boot
+
+#   Assign TCP buffer thresholds to be ceiling value of technology maximums
+#   Increased technology maximums should be reflected here.
+    write /proc/sys/net/core/rmem_max  6294156    
+    write /proc/sys/net/core/wmem_max  4194304
+
+# IMS stack for IMS
+service imsd /system/bin/imsd
+    class main
+    socket imsd stream 0660 system system
+    user root
+    group system radio net_raw inet net_admin readproc
+
+# NFC : create data/nfc for nv storage
+    mkdir /efs/sec_efs/nfc 0700 nfc nfc
+
+# Permissions for System LSI NFC
+    chmod 0660 /dev/sec-nfc
+    chown nfc nfc /dev/sec-nfc
+
+# FeliCaLock
+    mkdir /efs/sec_efs/FeliCaLock 0770 system felicalock
+
+# JPN: For MobileTV [ISDBT] \android\device\samsung\zeroltedcm\init.carrier.rc
+    service mobileTV /system/bin/SDtvService
+    class main
+    user system
+    group system radio audio graphics net_bt sdcard_rw shell media media_rw mediadrm dpgp
+
+on post-fs-data
+# Japan Add NFC Type Setting (Osaifu.cfg)
+    mkdir /data/misc/osaifu 0775 nfc system
+    copy /system/etc/osaifu/osaifu.cfg /data/misc/osaifu/osaifu.cfg
+    chmod 664 /data/misc/osaifu/osaifu.cfg
+    chown nfc system /data/misc/osaifu/osaifu.cfg
+
+# NFC KEY
+    copy /system/etc/nfc_key /data/nfc/Key
+    chmod 660 /data/nfc/Key
+    chown nfc nfc /data/nfc/Key
+    chmod 0700 /efs/sec_efs/nfc
+
+# JPN: For MobileTV [ISDBT] \android\device\samsung\zeroltedcm\init.carrier.rc
+    mkdir /data/one-seg 0775 system system
+    chown system system /data/one-seg
+    chmod 0775 /data/one-seg
+
+on post-fs
+
+# JPN: For MobileTV [ISDBT] \android\device\samsung\zeroltedcm\init.carrier.rc
+    chown system system /dev/isdbt
+    chmod 0660 /dev/isdbt
+
