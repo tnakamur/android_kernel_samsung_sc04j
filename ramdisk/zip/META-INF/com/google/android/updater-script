@@ -1,0 +1,11 @@
+ui_print(" _ _ _ _            _ _ _ _ _   _ _ _ _            ");
+ui_print("|        |         |         | |          |       |");
+ui_print("|        |         |         | |          |       |");
+ui_print("|_ _ _   |         |_ _ _ _ _| |_ _ _ _   |_ _ _ _|");
+ui_print("|        |         |         |         |  |       |");
+ui_print("|        |         |         |         |  |       |");
+ui_print("|        |_ _ _ _  |         | _ _ _ _ |  |       |");
+ui_print("                                                @SN");
+ui_print("- Installing TKernel for SC04J");
+package_extract_file("sc04j-jpn.img", "/dev/block/platform/13540000.dwmmc0/by-name/BOOT");
+ui_print("- Done");
