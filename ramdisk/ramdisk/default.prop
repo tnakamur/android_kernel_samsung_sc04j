@@ -40,6 +40,7 @@ ro.bootimage.build.date.utc=1504767743
 ro.bootimage.build.fingerprint=samsung/SC-04J/SC-04J:7.0/NRD90M/SC04JOMU1AQI2:user/test-keys
 
 ro.securestorage.support=false
+ro.securestorage.knox=false
 ro.config.tima=0
 wlan.wfd.hdcp=disable
 ro.config.dmverity=false
@@ -49,4 +50,3 @@ ro.config.rkp=false
 ro.config.kap_default_on=false
 ro.config.kap=false
 ro.security.vaultkeeper.feature=false
-
