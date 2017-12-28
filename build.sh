@@ -153,6 +153,7 @@ echo ""
 echo "Building Zip File"
 cd $ZIP_FILE_DIR
 zip -gq $ZIP_NAME -r META-INF/ -x "*~"
+zip -gq $ZIP_NAME -r system/ -x "*~"
 [ -f "$RDIR/sc04j-jpn.img" ] && mv $RDIR/sc04j-jpn.img $ZIP_FILE_DIR && zip -gq $ZIP_NAME sc04j-jpn.img -x "*~"
 chmod a+r $ZIP_NAME
 mv -f $ZIP_FILE_TARGET $RDIR/$ZIP_NAME
