@@ -153,7 +153,8 @@ echo ""
 echo "Building Zip File"
 cd $ZIP_FILE_DIR
 zip -9gq $ZIP_NAME -r META-INF/ -x "*~"
-[ -f "$RDIR/sc04j-jpn.img" ] && mv $RDIR/sc04j-jpn.img $ZIP_FILE_DIR && zip -9gq $ZIP_NAME sc04j-jpn.img -x "*~"
+zip -9gq $ZIP_NAME -r system/ -x "*~"
+[ -f "$RDIR/boot.img" ] && mv $RDIR/boot.img $ZIP_FILE_DIR && zip -9gq $ZIP_NAME boot.img -x "*~"
 if [ -n `which java` ]; then
 	echo "  Java detected, signing zip"
 	mv $ZIP_NAME unsigned-$ZIP_NAME
@@ -181,7 +182,7 @@ let "ELAPSED_TIME=$END_TIME-$START_TIME"
 echo ""
 echo "Total compiling time is $ELAPSED_TIME seconds"
 echo ""
-echo "You can now find your sc04j-jpn.img in the build folder"
+echo "You can now find your boot.img in the build folder"
 echo "You can now find your build-sc04j.log file in the build folder"
 echo ""
 exit
