@@ -8,8 +8,8 @@
 BUILD_SCRIPT=2.34
 VERSION_NUMBER=0.1.0
 ARCH=arm64
-BUILD_CROSS_COMPILE=/opt/toolchains/google/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
+BUILD_CROSS_COMPILE=/opt/toolchains/aarch64-cortex_a53-linux-gnueabi/bin/aarch64-cortex_a53-linux-gnueabi-
+BUILD_JOB_NUMBER=4
 RDIR=$(pwd)
 OUTDIR=$RDIR/arch/$ARCH/boot
 DTSDIR=$RDIR/arch/$ARCH/boot/dts
@@ -31,6 +31,7 @@ echo "Deleting old work files"
 echo ""
 make -s clean
 make -s ARCH=arm64 distclean
+rm -f $DIR/scripts/dtbTool/dtbTool
 rm -f $RDIR/*.img
 rm -f $RDIR/*.log
 rm -rf $RDIR/arch/arm64/boot/dtb
@@ -58,6 +59,18 @@ find . -name \.gitkeep -type f -delete
 
 FUNC_BUILD_ZIMAGE()
 {
+cd $RDIR/scripts/dtbTool && {
+    echo " [*] Building DTB tool"
+    echo
+    make clean
+    make -j$BUILD_JOB_NUMBER
+    echo
+    cd $RDIR
+} || {
+    echo " [!] Cannot find source code for DTB tool."
+    exit 1
+}
+
 echo "Loading configuration"
 echo ""
 make -s -j$BUILD_JOB_NUMBER ARCH=$ARCH \
@@ -99,7 +112,7 @@ echo "Processing dts files"
 echo ""
 for dts in $DTSFILES; do
 	echo "=> Processing: ${dts}.dts"
-	${CROSS_COMPILE}cpp -nostdinc -undef -x assembler-with-cpp -I "$INCDIR" "$DTSDIR/${dts}.dts" > "${dts}.dts"
+	${BUILD_CROSS_COMPILE}cpp -nostdinc -undef -x assembler-with-cpp -I "$INCDIR" "$DTSDIR/${dts}.dts" > "${dts}.dts"
 	echo "=> Generating: ${dts}.dtb"
 	$DTCTOOL -p $DTB_PADDING -i "$DTSDIR" -O dtb -o "${dts}.dtb" "${dts}.dts"
 done

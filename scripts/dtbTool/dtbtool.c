@@ -133,7 +133,7 @@ static void *load_dtbh_block(const char *dtb_path, unsigned pagesize, unsigned *
 	unsigned hdr_sz = DT_HEADER_PHYS_SIZE;
 	uint32_t version = DTBH_VERSION;
 	unsigned blob_sz = 0;
-	char fname[PATH_MAX];
+	char fname[4096];
 	const unsigned *prop_chip;
 	const unsigned *prop_platform;
 	const unsigned *prop_subtype;
