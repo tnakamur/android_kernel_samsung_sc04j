@@ -367,6 +367,9 @@ struct sec_battery_info {
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 	int batt_cycle;
 #endif
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	int fg_cycle_check_value;
+#endif
 #if defined(CONFIG_STEP_CHARGING)
 	unsigned int step_charging_type;
 	unsigned int step_charging_charge_power;
@@ -512,6 +515,9 @@ enum {
 	FG_FULL_VOLTAGE,
 	FG_FULLCAPNOM,
 	BATTERY_CYCLE,
+#endif
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	FG_CYCLE_CHECK_VALUE,
 #endif
 	BATT_WPC_TEMP,
 	BATT_WPC_TEMP_ADC,

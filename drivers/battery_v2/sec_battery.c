@@ -102,6 +102,9 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(fg_fullcapnom),
 	SEC_BATTERY_ATTR(battery_cycle),
 #endif
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	SEC_BATTERY_ATTR(fg_cycle_check_value),
+#endif
 	SEC_BATTERY_ATTR(batt_wpc_temp),
 	SEC_BATTERY_ATTR(batt_wpc_temp_adc),
 #if defined(CONFIG_WIRELESS_FIRMWARE_UPDATE)
@@ -4680,6 +4683,11 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->batt_cycle);
 		break;
 #endif
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	case FG_CYCLE_CHECK_VALUE:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->fg_cycle_check_value);
+		break;
+#endif
 	case BATT_WPC_TEMP:
 		if (battery->pdata->wpc_thermal_source) {
 			sec_bat_get_temperature_by_adc(battery,
@@ -5638,6 +5646,10 @@ ssize_t sec_bat_store_attrs(
 			}
 			ret = count;
 		}
+		break;
+#endif
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	case FG_CYCLE_CHECK_VALUE:
 		break;
 #endif
 	case BATT_WPC_TEMP:
@@ -8965,6 +8977,9 @@ static int sec_battery_probe(struct platform_device *pdev)
 #endif
 
 	battery->health_change = false;
+#if defined(CONFIG_DCM_JPN_CONCEPT_FG_CYCLE_CHECK)
+	battery->fg_cycle_check_value = 2000;
+#endif
 
 #if 0
 	if (charging_night_mode == 49)

@@ -467,6 +467,7 @@ static ssize_t debug_sessions_read(struct file *file, char __user *user_buf,
 static const struct file_operations mc_debug_sessions_ops = {
 	.read = debug_sessions_read,
 	.llseek = default_llseek,
+	.open = debug_generic_open,
 	.release = debug_generic_release,
 };
 
@@ -480,6 +481,7 @@ static ssize_t debug_mcpcmds_read(struct file *file, char __user *user_buf,
 static const struct file_operations mc_debug_mcpcmds_ops = {
 	.read = debug_mcpcmds_read,
 	.llseek = default_llseek,
+	.open = debug_generic_open,
 	.release = debug_generic_release,
 };
 

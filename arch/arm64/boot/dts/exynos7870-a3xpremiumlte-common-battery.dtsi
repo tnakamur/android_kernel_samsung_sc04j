@@ -328,12 +328,16 @@
 		   SEC_BATTERY_FULL_CONDITION_VCELL */
 		battery,full_condition_type = <13>;
 		battery,full_condition_soc = <93>;
-		battery,full_condition_vcell = <4270>;
+		battery,full_condition_vcell = <4250>;
 
 		battery,recharge_check_count = <1>;
 		battery,recharge_condition_type = <4>; /* SEC_BATTERY_RECHARGE_CONDITION_VCELL */
 		battery,recharge_condition_soc = <98>;
-		battery,recharge_condition_vcell = <4300>;
+		battery,recharge_condition_vcell = <4280>;
+
+		battery,expired_time = <11400>;
+		battery,recharginig_expired_time = <5400>;
+		battery,standard_curr = <2160>;
 
 		battery,expired_time = <11400>;
 		battery,recharginig_expired_time = <5400>;
@@ -346,7 +350,7 @@
 		battery,chg_float_voltage = <4350>;
 
 		battery,swelling_high_temp_block = <410>;
-		battery,swelling_high_temp_recov = <360>;
+		battery,swelling_high_temp_recov = <390>;
 
 		battery,swelling_low_temp_2step_mode = <1>;
 		battery,swelling_low_temp_block_1st = <150>;
@@ -391,11 +395,11 @@
 		battery,ttf_hv_wireless_charge_current = <1500>;
 
 		/* cycle, chg_float_voltage, recharge_condition_vcell, full_condition_vcell, full_condition_soc */
-		battery,age_data = <0 4350 4300 4250 92	/*4.35*/
-				200 4330 4280 4230 91	/*4.33*/
-				250 4310 4260 4210 89	/*4.31*/
-				300 4290 4240 4190 87	/*4.29*/
-				1000 4240 4190 4140 83	/*4.24*/
+		battery,age_data = <0 4350 4280 4250 93	/*4.35*/
+				200 4330 4260 4230 91	/*4.33*/
+				250 4310 4240 4210 89	/*4.31*/
+				300 4290 4220 4190 87	/*4.29*/
+				1000 4240 4170 4140 83	/*4.24*/
 				>;
 
 		/* values for using CONFIG_STEP_CHARGING */
