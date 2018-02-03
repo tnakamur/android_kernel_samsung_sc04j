@@ -45,7 +45,7 @@ const struct fimc_is_subdev_ops fimc_is_subdev_mcsp_ops;
 
 void fimc_is_enter_lib_isr(void)
 {
-	kernel_neon_begin_partial(32);
+	kernel_neon_begin();
 }
 
 void fimc_is_exit_lib_isr(void)

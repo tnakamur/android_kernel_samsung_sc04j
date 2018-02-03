@@ -10,8 +10,8 @@ edit "CROSS_COMPILE" to right toolchain path(You downloaded).
   Ex)  CROSS_COMPILE=/usr/local/toolchain/arm-eabi-4.9/bin/arm-eabi-                // check the location of toolchain
 
         - to Build
-          $ make ARCH=arm64 exynos7870-a3xpremiumlte_jpn_dcm_defconfig
-          $ make ARCH=arm64
+          $ make exynos7870-a3xpremiumlte_jpn_dcm_defconfig
+          $ make -j64
 
 2. Output files
 - Kernel : arch/arm/boot/zImage

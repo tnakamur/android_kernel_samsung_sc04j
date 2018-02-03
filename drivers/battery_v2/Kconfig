@@ -47,6 +47,12 @@ config BATTERY_AGE_FORECAST
 	help
 	Say Y to use calc time to full function.
 
+config DCM_JPN_CONCEPT_FG_CYCLE_CHECK
+	bool "enable fg_cycle_check_value for dcm jpn"
+	default n
+	help
+	 Say Y to use fg_cycle_check_value.
+
 config MULTI_CHARGING
 	bool "support for multi charger ICs"
 	help

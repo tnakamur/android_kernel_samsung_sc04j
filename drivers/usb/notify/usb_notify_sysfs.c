@@ -326,9 +326,8 @@ static ssize_t usb_hw_param_store(
 
 	for (index = 0; index < USB_CCIC_HW_PARAM_MAX; index++) {
 		token = strsep(&str, " ");
+		if (token)
 		n->hw_param[index] += strtoull(token, NULL, 10);
-		pr_info("%s - hw_param[%d] : %llu\n",
-			__func__, index, n->hw_param[index]);
 	}
 error:
 	return ret;
