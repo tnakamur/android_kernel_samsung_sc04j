@@ -304,8 +304,10 @@
 
 #if defined(CONFIG_USE_DIRECT_IS_CONTROL)
 #undef ENABLE_IS_CORE
+#define ENABLE_FPSIMD_FOR_USER
 #else
 #define ENABLE_IS_CORE
+#undef ENABLE_FPSIMD_FOR_USER
 #endif
 
 #if defined(DEBUG)
