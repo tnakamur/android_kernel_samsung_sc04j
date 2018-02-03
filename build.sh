@@ -32,6 +32,7 @@ echo ""
 make -s clean
 make -s ARCH=arm64 distclean
 rm -f $RDIR/*.img
+rm -f $RDIR/*.zip
 rm -f $RDIR/*.log
 rm -rf $RDIR/arch/arm64/boot/dtb
 rm -f $RDIR/arch/$ARCH/boot/dts/*.dtb
@@ -40,6 +41,8 @@ rm -f $RDIR/arch/$ARCH/boot/boot.img-zImage
 rm -f $RDIR/ramdisk/image-new.img
 rm -f $RDIR/ramdisk/ramdisk-new.cpio.gz
 rm -f $RDIR/ramdisk/image-new.img
+rm -f $RDIR/ramdisk/split_img/boot.img-zImage
+rm -f $RDIR/ramdisk/zip/sc04j-jpn.img
 echo "" > $RDIR/ramdisk/ramdisk/acct/.gitkeep
 echo "" > $RDIR/ramdisk/ramdisk/cache/.gitkeep
 echo "" > $RDIR/ramdisk/ramdisk/data/.gitkeep
