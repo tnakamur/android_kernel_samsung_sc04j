@@ -43,15 +43,29 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_WIRELESS_TX_VAL,
 	POWER_SUPPLY_EXT_PROP_AICL_CURRENT,
 	POWER_SUPPLY_EXT_PROP_CHECK_MULTI_CHARGE,
-	POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING,
+	POWER_SUPPLY_EXT_PROP_CHIP_ID,
 	POWER_SUPPLY_EXT_PROP_SYSOVLO,
 	POWER_SUPPLY_EXT_PROP_VBAT_OVP,
+	POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING,
+	POWER_SUPPLY_EXT_PROP_USB_CONFIGURE,
+	POWER_SUPPLY_EXT_PROP_WATER_DETECT,
+	POWER_SUPPLY_EXT_PROP_SURGE,
 	POWER_SUPPLY_EXT_PROP_FUELGAUGE_RESET,
 	POWER_SUPPLY_EXT_PROP_FACTORY_VOLTAGE_REGULATION,
+	POWER_SUPPLY_EXT_PROP_DISABLE_FACTORY_MODE,
 	POWER_SUPPLY_EXT_PROP_ANDIG_IVR_SWITCH,
-#if defined(CONFIG_FUELGAUGE_S2MU004)
+	POWER_SUPPLY_EXT_PROP_FUELGAUGE_FACTORY,
+	POWER_SUPPLY_EXT_PROP_CURRENT_MEASURE,
+	POWER_SUPPLY_EXT_PROP_HV_DISABLE,
+#if defined(CONFIG_FUELGAUGE_S2MU004) || defined(CONFIG_FUELGAUGE_S2MU005)
 	POWER_SUPPLY_EXT_PROP_UPDATE_BATTERY_DATA,
 #endif
+};
+
+enum sec_battery_rp_curr {
+	RP_CURRENT_RP1 = 500,
+	RP_CURRENT_RP2 = 1500,
+	RP_CURRENT_RP3 = 3000,
 };
 
 enum power_supply_ext_health {
@@ -513,12 +527,18 @@ struct sec_charging_current {
 
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 struct sec_age_data {
-	unsigned int cycle;
+	int cycle;
 	unsigned int float_voltage;
 	unsigned int recharge_condition_vcell;
 	unsigned int full_condition_vcell;
 	unsigned int full_condition_soc;
+#if defined(CONFIG_BATTERY_AGE_FORECAST_B2B)
+	unsigned int max_charging_current;
+#endif
 };
+
+#define sec_age_data_t \
+	struct sec_age_data
 
 #define sec_age_data_t \
 	struct sec_age_data
@@ -792,6 +812,8 @@ struct sec_battery_platform_data {
 	int wpc_det;
 	int wpc_en;
 
+	int thm_mux;
+
 	int chg_gpio_en;
 	int chg_irq;
 	unsigned long chg_irq_attr;
@@ -820,6 +842,11 @@ struct sec_battery_platform_data {
 	int siop_wireless_charging_limit_current;
 	int siop_hv_wireless_input_limit_current;
 	int siop_hv_wireless_charging_limit_current;
+
+	int default_input_current;
+	int default_charging_current;
+	int default_usb_input_current;
+ 	int default_usb_charging_current;
 	int max_input_voltage;
 	int max_input_current;
 	int pre_afc_work_delay;
@@ -837,6 +864,7 @@ struct sec_battery_platform_data {
 	unsigned int cisd_cap_low_thr;
 	unsigned int cisd_cap_limit;
 	unsigned int max_voltage_thr;
+	char *cisd_data_efs_path;
 #endif
 
 	/* ADC setting */
@@ -869,6 +897,7 @@ struct sec_charger_platform_data {
 
 	/* otg_en setting */
 	int otg_en;
+	unsigned int slow_current_threshold;
 
 	/* OVP/UVLO check */
 	sec_battery_ovp_uvlo_t ovp_uvlo_check_type;

@@ -60,7 +60,7 @@ static void sec_param_update(struct work_struct *work)
 		pr_err("%s: write error! %d\n", __func__, ret);
 
 close_fp_out:
-		filp_close(fp, NULL);
+	filp_close(fp, NULL);
 	pr_info("%s: exit %d\n", __func__, ret);
 }
 
@@ -74,8 +74,8 @@ static void sec_param_update_str(struct work_struct *work)
 	fp = filp_open(SEC_PARAM_NAME, O_WRONLY | O_SYNC, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: filp_open error %ld\n", __func__, PTR_ERR(fp));
-	return;
-}
+		return;
+	}
 	pr_info("%s: set param %s at %lu\n", __func__,
 				param_data_str->str, param_data_str->offset);
 	ret = fp->f_op->llseek(fp, param_data_str->offset, SEEK_SET);

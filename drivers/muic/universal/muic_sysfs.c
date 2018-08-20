@@ -47,6 +47,19 @@
 #include "muic_apis.h"
 #include "muic_regmap.h"
 
+#if defined(CONFIG_MUIC_SUPPORT_CCIC) || defined(CONFIG_MUIC_UNIVERSAL_CCIC)
+#include "muic_ccic.h"
+#endif
+
+static int muic_resolve_attached_dev(muic_data_t *pmuic)
+{
+#if defined(CONFIG_MUIC_SUPPORT_CCIC) || defined(CONFIG_MUIC_UNIVERSAL_CCIC)
+        if (pmuic->opmode & OPMODE_CCIC)
+                return muic_get_current_legacy_dev(pmuic);
+#endif
+        return pmuic->attached_dev;
+}
+
 static ssize_t muic_show_uart_en(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
@@ -283,11 +296,12 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 					 char *buf)
 {
 	muic_data_t *pmuic = dev_get_drvdata(dev);
+        int mdev = muic_resolve_attached_dev(pmuic);
 
-	pr_info("%s:%s attached_dev:%d\n", MUIC_DEV_NAME, __func__,
-			pmuic->attached_dev);
+        pr_info("%s:%s attached_dev:%d\n", MUIC_DEV_NAME, __func__,
+                        mdev);
 
-	switch(pmuic->attached_dev) {
+	switch(mdev) {
 	case ATTACHED_DEV_NONE_MUIC:
 		return sprintf(buf, "No VPS\n");
 	case ATTACHED_DEV_USB_MUIC:
@@ -304,6 +318,8 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "JIG UART OFF/VB\n");
 	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		return sprintf(buf, "JIG UART ON\n");
+	case ATTACHED_DEV_JIG_UART_ON_VB_MUIC:
+		return sprintf(buf, "JIG UART ON/VB\n");
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
 		return sprintf(buf, "JIG USB OFF\n");
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:
@@ -312,10 +328,21 @@ static ssize_t muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "DESKDOCK\n");
 	case ATTACHED_DEV_AUDIODOCK_MUIC:
 		return sprintf(buf, "AUDIODOCK\n");
+	case ATTACHED_DEV_POGO_MUIC:
+		return sprintf(buf, "POGO Dock\n");
 	case ATTACHED_DEV_CHARGING_CABLE_MUIC:
 		return sprintf(buf, "PS CABLE\n");
+	case ATTACHED_DEV_AFC_CHARGER_PREPARE_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_PREPARE_DUPLI_MUIC:
+	case ATTACHED_DEV_AFC_CHARGER_5V_DUPLI_MUIC:
+		return sprintf(buf, "AFC Communication\n");
+	case ATTACHED_DEV_AFC_CHARGER_5V_MUIC:
 	case ATTACHED_DEV_AFC_CHARGER_9V_MUIC:
+	case ATTACHED_DEV_QC_CHARGER_5V_MUIC:
+	case ATTACHED_DEV_QC_CHARGER_9V_MUIC:
 		return sprintf(buf, "AFC charger\n");
+	case ATTACHED_DEV_TIMEOUT_OPEN_MUIC:
+		return sprintf(buf, "TIMEOUT OPEN\n");
 	default:
 		break;
 	}

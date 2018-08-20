@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Samsung Electronics
+ * Copyright (C) 2016 Samsung Electronics
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -12,34 +12,216 @@
  * GNU General Public License for more details.
  *
  */
+#if defined(CONFIG_IFPMIC_SUPPORT)
+#include <linux/ifpmic/ccic/usbpd-s2mu004.h>
+#else
 #include <linux/ccic/pdic_notifier.h>
-#if defined(CONFIG_CCIC_NOTIFIER)
-#include <linux/ccic/ccic_notifier.h>
+#include <linux/ccic/usbpd_msg.h>
 #endif
-#if defined(CONFIG_DUAL_ROLE_USB_INTF)
-#include <linux/usb/class-dual-role.h>
-#endif
-#ifndef __S2MU004_H__
-#define __S2MU004_H__
+
+#ifndef __USBPD_S2MU004_H__
+#define __USBPD_S2MU004_H__
 
 #define USBPD_DEV_NAME	"usbpd-s2mu004"
 
+/* message buffer */
 #define S2MU004_MAX_NUM_MSG_OBJ (7)
+/* INTERRUPT STATUS NUM */
 #define S2MU004_MAX_NUM_INT_STATUS (7)
 
 #define S2MU004_REG_TYPEC_DIS (1 << 2)
-#define S2MU004_REG_LPM_EN (1 << 1)
 
-#define S2MU004_REG_PLUG_CTRL_DRP (3)
-#define S2MU004_REG_PLUG_CTRL_DFP (1)
-#define S2MU004_REG_PLUG_CTRL_UFP (2)
-#define S2MU004_REG_PLUG_CTRL_RP80 (1 << 4)
-#define S2MU004_REG_PLUG_CTRL_RP180 (2 << 4)
-#define S2MU004_REG_PLUG_CTRL_RP0 (0 << 4)
-#define S2MU004_REG_PLUG_CTRL_RESET (~0x33)
+/* define timer */
+#define S2MU004_ROLE_SWAP_TIME_MS		(1350)
+#define S2MU004_HARD_RESET_DELAY_MS		(300)
+#define S2MU004_WAIT_RD_DETACH_DELAY_MS		(200)
+#define S2MU004_WAIT_ATTACH_DELAY_MS		(30)
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
+#define DUAL_ROLE_SET_MODE_WAIT_MS		(2000)
+#endif
+#define S2MU004_WATER_CHK_INTERVAL_TIME		(300)
 
-#define S2MU004_REG_MSG_DATA_ROLE_MASK (0x1 << 5)
+#define WATER_CHK_RETRY_CNT	2
+#define IS_CC_RP(cc1, cc2)	((cc1 == USBPD_Rp) && (cc2 == USBPD_Rp))
+#define IS_CC_WATER(cc1, cc2)	((cc1 != USBPD_Rp) && (cc2 != USBPD_Rp))
+#define IS_ONLY_CC1_WATER(cc1, cc2)	((cc1 != USBPD_Rp) && (cc2 == USBPD_Rp))
+#define IS_ONLY_CC2_WATER(cc1, cc2)	((cc1 == USBPD_Rp) && (cc2 != USBPD_Rp))
 
+/*****************************************/
+/***********DEFINITION REGISTER***********/
+/*****************************************/
+#define S2MU004_RESET_REG_00		(0x00)
+
+/* reg 0x01 LPM MODE ENABLE */
+#define S2MU004_REG_LP_LDO_D_SHIFT (0)
+#define S2MU004_REG_LPM_EN_SHIFT (1)
+#define S2MU004_REG_LP_LDO_D \
+		(1 << S2MU004_REG_LP_LDO_D_SHIFT) /* 0x01 */
+#define S2MU004_REG_LPM_EN \
+		(0x1 << S2MU004_REG_LPM_EN_SHIFT) /* 0x02 */
+
+/* reg 0x02 */
+#define S2MU004_REG_CC_OCP_SHIFT (4)
+#define S2MU004_REG_CC_OCP_MASK  (0xf << S2MU004_REG_CC_OCP_SHIFT)
+
+/* reg 0x18 */
+#define S2MU004_REG_PLUG_CTRL_MODE_SHIFT	(0)
+#define S2MU004_REG_PLUG_CTRL_RP_SEL_SHIFT	(4)
+#define S2MU004_REG_PLUG_CTRL_DETECT_BAT_DISABLE_SHIFT	(6)
+#define S2MU004_REG_PLUG_CTRL_DETECT_OCP_DISABLE_SHIFT	(7)
+#define S2MU004_REG_PLUG_CTRL_DFP \
+		(0x1 << S2MU004_REG_PLUG_CTRL_MODE_SHIFT) /* 0x01 */
+#define S2MU004_REG_PLUG_CTRL_UFP \
+		(0x2 << S2MU004_REG_PLUG_CTRL_MODE_SHIFT) /* 0x02 */
+#define S2MU004_REG_PLUG_CTRL_DRP \
+		(0x3 << S2MU004_REG_PLUG_CTRL_MODE_SHIFT) /* 0x03 */
+#define S2MU004_REG_PLUG_CTRL_RP0 \
+		(0x0 << S2MU004_REG_PLUG_CTRL_RP_SEL_SHIFT) /* 0x00 */
+#define S2MU004_REG_PLUG_CTRL_RP80 \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RP_SEL_SHIFT) /* 0x10 */
+#define S2MU004_REG_PLUG_CTRL_RP180 \
+		(0x2 << S2MU004_REG_PLUG_CTRL_RP_SEL_SHIFT) /* 0x20 */
+#define S2MU004_REG_PLUG_CTRL_MODE_MASK	\
+		(0x3 << S2MU004_REG_PLUG_CTRL_MODE_SHIFT) /* 0x03 */
+#define S2MU004_REG_PLUG_CTRL_RP_SEL_MASK \
+		(0x3 << S2MU004_REG_PLUG_CTRL_RP_SEL_SHIFT)/* 0x30 */
+#define S2MU004_REG_PLUG_CTRL_DETECT_BAT_DISABLE_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_DETECT_BAT_DISABLE_SHIFT)/* 0x40 */
+#define S2MU004_REG_PLUG_CTRL_DETECT_OCP_DISABLE_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_DETECT_OCP_DISABLE_SHIFT)/* 0x80 */
+
+/* reg 0x19 */
+#define S2MU004_REG_MSG_DATA_ROLE_SHIFT		(5)
+#define S2MU004_REG_MSG_POWER_ROLE_SHIFT	(6)
+#define S2MU004_REG_MSG_DATA_ROLE_UFP \
+		(0x0 << S2MU004_REG_MSG_DATA_ROLE_SHIFT) /* 0x00 */
+#define S2MU004_REG_MSG_DATA_ROLE_DFP \
+		(0x1 << S2MU004_REG_MSG_DATA_ROLE_SHIFT) /* 0x20 */
+#define S2MU004_REG_MSG_DATA_ROLE_MASK \
+		(0x1 << S2MU004_REG_MSG_DATA_ROLE_SHIFT) /* 0x20 */
+#define S2MU004_REG_MSG_POWER_ROLE_SINK \
+		(0x0 << S2MU004_REG_MSG_POWER_ROLE_SHIFT) /* 0x00 */
+#define S2MU004_REG_MSG_POWER_ROLE_SOURCE \
+		(0x1 << S2MU004_REG_MSG_POWER_ROLE_SHIFT) /* 0x40 */
+#define S2MU004_REG_MSG_POWER_ROLE_MASK \
+		(0x1 << S2MU004_REG_MSG_POWER_ROLE_SHIFT) /* 0x40 */
+
+/* reg 0x26 */
+#define S2MU004_REG_PLUG_CTRL_CC_HOLD_BIT     (0x1)
+
+/* reg 0x27 */
+#define S2MU004_REG_PLUG_CTRL_FSM_MANUAL_EN_SHIFT	(2)
+#define S2MU004_REG_PLUG_CTRL_RpRd_PLUG_SEL_SHIFT	(3)
+#define S2MU004_REG_PLUG_CTRL_VCONN_MANUAL_EN_SHIFT	(4)
+#define S2MU004_REG_PLUG_CTRL_RpRd_CC1_VCONN_SHIFT	(5)
+#define S2MU004_REG_PLUG_CTRL_RpRd_CC2_VCONN_SHIFT	(6)
+#define S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_SHIFT	(7)
+
+#define S2MU004_REG_PLUG_CTRL_FSM_MANUAL_EN \
+		(0x1 << S2MU004_REG_PLUG_CTRL_FSM_MANUAL_EN_SHIFT) /* 0x04 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_PLUG_SEL_SHIFT | \
+			0x1 << S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_SHIFT) /* 0x88 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_Rp_Source_Mode \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_PLUG_SEL_SHIFT | \
+			0x1 << S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_SHIFT) /* 0x88 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_Rd_Sink_Mode \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_SHIFT) /* 0x80 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_MANUAL_EN_SHIFT) /* 0x80 */
+#define S2MU004_REG_PLUG_CTRL_VCONN_MANUAL_EN \
+		(0x1 << S2MU004_REG_PLUG_CTRL_VCONN_MANUAL_EN_SHIFT) /* 0x10 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_CC1_VCONN \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_CC1_VCONN_SHIFT) /* 0x20 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_CC2_VCONN \
+		(0x1 << S2MU004_REG_PLUG_CTRL_RpRd_CC2_VCONN_SHIFT) /* 0x40 */
+#define S2MU004_REG_PLUG_CTRL_RpRd_VCONN_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_VCONN_MANUAL_EN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_RpRd_CC1_VCONN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_RpRd_CC2_VCONN_SHIFT) /* 0x70 */
+
+/* reg 0x28 */
+#define S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN_SHIFT	(4)
+#define S2MU004_REG_PLUG_CTRL_CC1_MANUAL_EN_SHIFT	(5)
+#define S2MU004_REG_PLUG_CTRL_CC2_MANUAL_EN_SHIFT	(6)
+
+#define S2MU004_REG_PLUG_CTRL_FSM_MANUAL_INPUT_MASK	(0xf)
+#define S2MU004_REG_PLUG_CTRL_FSM_ATTACHED_SNK		(2)
+#define S2MU004_REG_PLUG_CTRL_FSM_ATTACHED_SRC		(6)
+#define S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN \
+		(0x1 << S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN_SHIFT) /* 0x10 */
+#define S2MU004_REG_PLUG_CTRL_CC1_MANUAL_ON \
+		(0x1 << S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_CC1_MANUAL_EN_SHIFT) /* 0x30 */
+#define S2MU004_REG_PLUG_CTRL_CC2_MANUAL_ON \
+		(0x1 << S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_CC2_MANUAL_EN_SHIFT) /* 0x50 */
+#define S2MU004_REG_PLUG_CTRL_CC_MANUAL_MASK \
+		(0x1 << S2MU004_REG_PLUG_CTRL_CC_MANUAL_EN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_CC1_MANUAL_EN_SHIFT | \
+		0x1 << S2MU004_REG_PLUG_CTRL_CC2_MANUAL_EN_SHIFT) /* 0x70 */
+
+/* reg 0x90 (For S2MU004_REG_MSG_SEND_CON) */
+#define S2MU004_REG_MSG_SEND_CON_SEND_MSG_EN_SHIFT	(0)
+#define S2MU004_REG_MSG_SEND_CON_OP_MODE_SHIFT		(1)
+#define S2MU004_REG_MSG_SEND_CON_SOP_SHIFT		(2)
+
+#define S2MU004_REG_MSG_SEND_CON_SEND_MSG_EN \
+		(0x1 << S2MU004_REG_MSG_SEND_CON_SEND_MSG_EN_SHIFT) /* 0x01 */
+#define S2MU004_REG_MSG_SEND_CON_OP_MODE \
+		(0x1 << S2MU004_REG_MSG_SEND_CON_OP_MODE_SHIFT) /* 0x02 */
+#define S2MU004_REG_MSG_SEND_CON_SOP \
+		(0x0 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x00 */
+#define S2MU004_REG_MSG_SEND_CON_SOP_Prime \
+		(0x1 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x04 */
+#define S2MU004_REG_MSG_SEND_CON_SOP_DPrime \
+		(0x2 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x08 */
+#define S2MU004_REG_MSG_SEND_CON_SOP_PDebug \
+		(0x3 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x0C */
+#define S2MU004_REG_MSG_SEND_CON_SOP_DPDebug \
+		(0x4 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x10 */
+#define S2MU004_REG_MSG_SEND_CON_SOP_HardRST \
+		(0x5 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x14 */
+#define S2MU004_REG_MSG_SEND_CON_SOP_CableRST \
+		(0x6 << S2MU004_REG_MSG_SEND_CON_SOP_SHIFT) /* 0x18 */
+
+/* reg 0xB2 */
+#define S2MU004_PDIC_RID_SHIFT		(5)
+#define S2MU004_PDIC_RID_MASK		(0x7 << S2MU004_PDIC_RID_SHIFT) /* 0xE0 */
+
+/* reg 0xB3 */
+#define S2MU004_REG_CTRL_MON_CC1_SHIFT		(0)
+#define S2MU004_REG_CTRL_MON_CC2_SHIFT		(3)
+#define S2MU004_REG_CTRL_MON_CC1_MASK \
+		(0x7 << S2MU004_REG_CTRL_MON_CC1_SHIFT) /* 0x07 */
+#define S2MU004_REG_CTRL_MON_CC2_MASK \
+		(0x7 << S2MU004_REG_CTRL_MON_CC2_SHIFT) /* 0x38 */
+
+/* reg 0xB4 */
+#define S2MU004_PDIC_PLUG_ATTACH_DONE_SHIFT	(1)
+#define S2MU004_PDIC_SINK_SEL_MONITOR_SHIFT	(2)
+#define S2MU004_PDIC_SOURCE_SEL_MONITOR_SHIFT	(3)
+
+#define S2MU004_PDIC_SINK (1 << S2MU004_PDIC_SINK_SEL_MONITOR_SHIFT \
+		| 1 << S2MU004_PDIC_PLUG_ATTACH_DONE_SHIFT) /* 0x06 */
+#define S2MU004_PDIC_SOURCE (1 << S2MU004_PDIC_SOURCE_SEL_MONITOR_SHIFT \
+		| 1 << S2MU004_PDIC_PLUG_ATTACH_DONE_SHIFT) /* 0x0A */
+#define S2MU004_PDIC_ATTACH_MASK (1 << S2MU004_PDIC_PLUG_ATTACH_DONE_SHIFT) /* 0x02 */
+#define S2MU004_PR_MASK (S2MU004_PDIC_SINK | S2MU004_PDIC_SOURCE) /* 0x0E */
+/* reg 0xF7 */
+#define S2MU004_REG_ETC_SOFT_RESET_EN_SHIFT	(1)
+#define S2MU004_REG_ETC_SOFT_RESET_EN \
+		(0x1 << S2MU004_REG_ETC_SOFT_RESET_EN_SHIFT) /* 0x02 */
+#define S2MU004_REG_ETC_SOFT_RESET_DIS \
+		(0x0 << S2MU004_REG_ETC_SOFT_RESET_EN_SHIFT) /* 0x00 */
+
+/* reg 0xF8 */
+#define S2MU004_REG_ID_MONITOR_MSG_ID_MASK	(0x07)
+
+
+/*****************************************/
+/***********DEFINITION INTERRUPT**********/
+/*****************************************/
 #define S2MU004_REG_INT_STATUS0_MSG_ACCEPT    (1<<0)
 #define S2MU004_REG_INT_STATUS0_MSG_GOODCRC   (1<<1)
 #define S2MU004_REG_INT_STATUS0_VDM_ATTENTION (1<<2)
@@ -49,6 +231,7 @@
 #define S2MU004_REG_INT_STATUS0_VDM_DISCOVER_SVID (1<<6)
 #define S2MU004_REG_INT_STATUS0_VDM_DISCOVER_ID   (1<<7)
 
+/* reg 0xE1 */
 #define S2MU004_REG_INT_STATUS1_MSG_PING      (1<<7)
 #define S2MU004_REG_INT_STATUS1_MSG_GOTOMIN   (1<<6)
 #define S2MU004_REG_INT_STATUS1_MSG_REJECT    (1<<5)
@@ -58,6 +241,7 @@
 #define S2MU004_REG_INT_STATUS1_MSG_DR_SWAP   (1<<1)
 #define S2MU004_REG_INT_STATUS1_MSG_PR_SWAP   (1<<0)
 
+/* reg 0xE2 */
 #define S2MU004_REG_INT_STATUS2_MSG_VCONN_SWAP (1<<7)
 #define S2MU004_REG_INT_STATUS2_MSG_WAIT       (1<<6)
 #define S2MU004_REG_INT_STATUS2_MSG_SRC_CAP    (1<<5)
@@ -66,8 +250,10 @@
 #define S2MU004_REG_INT_STATUS2_MSG_SOFTRESET  (1<<2)
 #define S2MU004_REG_INT_STATUS2_WAKEUP         (1<<0)
 
+/* reg 0xE3 */
 #define S2MU004_REG_INT_STATUS3_UNS_CMD_DATA   (1<<5)
 
+/* reg 0xE4 */
 #define S2MU004_REG_INT_STATUS4_CC12_DET_IRQ  (1<<6)
 #define S2MU004_REG_INT_STATUS4_PLUG_IRQ      (1<<5)
 #define S2MU004_REG_INT_STATUS4_USB_DETACH    (1<<4)
@@ -75,7 +261,8 @@
 #define S2MU004_REG_INT_STATUS4_MSG_SENT      (1<<2)
 #define S2MU004_REG_INT_STATUS4_MSG_ERROR     (1<<1)
 
-#define S2MU004_REG_PLUG_CTRL_CC_HOLD_BIT     (1<<0)
+/* reg 0xE5 */
+#define S2MU004_REG_INT_STATUS5_HARD_RESET     (1<<2)
 
 /* interrupt for checking message */
 #define ENABLED_INT_0	(S2MU004_REG_INT_STATUS0_MSG_ACCEPT)
@@ -94,58 +281,7 @@
 #define ENABLED_INT_4	(S2MU004_REG_INT_STATUS4_USB_DETACH |\
 				S2MU004_REG_INT_STATUS4_PLUG_IRQ |\
 				S2MU004_REG_INT_STATUS4_MSG_PASS)
-#define ENABLED_INT_4_PASS	(S2MU004_REG_INT_STATUS4_USB_DETACH |\
-				S2MU004_REG_INT_STATUS4_PLUG_IRQ |\
-				S2MU004_REG_INT_STATUS4_MSG_PASS)
-
-#define S2MU004_PDIC_PLUG_ATTACH_DONE_SHT	(1)
-#define S2MU004_PDIC_SINK_SEL_MONITOR_SHT	(2)
-#define S2MU004_PDIC_SOURCE_SEL_MONITOR_SHT	(3)
-
-#define S2MU004_PDIC_SINK (1 << S2MU004_PDIC_SINK_SEL_MONITOR_SHT \
-		| 1 << S2MU004_PDIC_PLUG_ATTACH_DONE_SHT)
-#define S2MU004_PDIC_SOURCE (1 << S2MU004_PDIC_SOURCE_SEL_MONITOR_SHT \
-		| 1 << S2MU004_PDIC_PLUG_ATTACH_DONE_SHT)
-
-#define S2MU004_PR_MASK (S2MU004_PDIC_SINK | S2MU004_PDIC_SOURCE)
-
-/* For S2MU004_REG_MSG_SEND_CON */
-#define S2MU004_REG_MSG_SEND_CON_SEND_MSG_EN	0x01
-#define S2MU004_REG_MSG_SEND_CON_OP_MODE	0x02
-#define S2MU004_REG_MSG_SEND_CON_SOP		0x00
-#define S2MU004_REG_MSG_SEND_CON_SOP_Prime	(0x01 << 2)
-#define S2MU004_REG_MSG_SEND_CON_SOP_DPrime	(0x02 << 2)
-#define S2MU004_REG_MSG_SEND_CON_SOP_PDebug	(0x03 << 2)
-#define S2MU004_REG_MSG_SEND_CON_SOP_DPDebug	(0x04 << 2)
-#define S2MU004_REG_MSG_SEND_CON_SOP_HardRST	(0x05 << 2)
-#define S2MU004_REG_MSG_SEND_CON_SOP_CableRST	(0x06 << 2)
-#define S2MU004_REG_PLUG_CTRL_RpRd_Rp_Source_Mode ((0x1 << 7) | (0x1 << 3))
-#define S2MU004_REG_PLUG_CTRL_RpRd_Rd_Sink_Mode (0x1 << 7)
-#define S2MU004_REG_PLUG_CTRL_RpRd_CC1_VCONN    (0x30)
-#define S2MU004_REG_PLUG_CTRL_RpRd_CC2_VCONN    (0x50)
-#define S2MU004_REG_PLUG_CTRL_CC1_MANUAL_ON     (0x30)
-#define S2MU004_REG_PLUG_CTRL_CC2_MANUAL_ON     (0x50)
-#define S2MU004_REG_PLUG_CTRL_CC_VCONN_MASK    (0x7 << 4)
-#define S2MU004_REG_PLUG_CTRL_CC_VCONN_MANUAL  (0x1 << 4)
-
-#define S2MU004_PDIC_RID_SHIFT			5
-#define S2MU004_PDIC_RID_MASK			(0x7 << S2MU004_PDIC_RID_SHIFT)
-
-enum s2mu004_power_role {
-	PDIC_SINK,
-	PDIC_SOURCE
-};
-
-enum s2mu004_pdic_rid {
-	REG_RID_UNDF = 0x00,
-	REG_RID_255K = 0x03,
-	REG_RID_301K = 0x04,
-	REG_RID_523K = 0x05,
-	REG_RID_619K = 0x06,
-	REG_RID_OPEN = 0x07,
-	REG_RID_MAX  = 0x08,
-};
-
+#define ENABLED_INT_5   (S2MU004_REG_INT_STATUS5_HARD_RESET)
 
 /* S2MU004 I2C registers */
 enum s2mu004_usbpd_reg {
@@ -205,25 +341,96 @@ enum s2mu004_usbpd_reg {
 	S2MU004_REG_MSG_OBJECT6_0_L         = 0xAB,
 	S2MU004_REG_MSG_OBJECT6_0_H         = 0xAC,
 	S2MU004_REG_MSG_OBJECT6_1_L         = 0xAD,
-	S2MU004_REG_MSG_OBJECT6_1_H         = 0xAE
+	S2MU004_REG_MSG_OBJECT6_1_H         = 0xAE,
+
+	S2MU004_REG_ETC			    = 0xF7,
+	S2MU004_REG_ID_MONITOR		    = 0xF8
 };
-#if defined(CONFIG_DUAL_ROLE_USB_INTF)
-typedef enum {
-	TYPE_C_DETACH = 0,
-	TYPE_C_ATTACH_DFP = 1, /* Host */
-	TYPE_C_ATTACH_UFP = 2, /* Device */
-	TYPE_C_ATTACH_DRP = 3, /* Dual role */
-} CCIC_OTP_MODE;
 
 typedef enum {
-	PLUG_CTRL_RP0 = 0,
-	PLUG_CTRL_RP80 = 1,
-	PLUG_CTRL_RP180 = 2,
-	PLUG_CTRL_RP330 = 3
-} CCIC_RP_SCR_SEL;
+	S2MU004_THRESHOLD_128MV = 2,
+	S2MU004_THRESHOLD_171MV = 3,
+	S2MU004_THRESHOLD_214MV = 4,
+	S2MU004_THRESHOLD_257MV = 5,
+	S2MU004_THRESHOLD_300MV = 6,
+	S2MU004_THRESHOLD_342MV = 7,
+	S2MU004_THRESHOLD_385MV = 8,
+	S2MU004_THRESHOLD_428MV = 9,
+	S2MU004_THRESHOLD_450MV = 10,
+	S2MU004_THRESHOLD_471MV = 11,
+	S2MU004_THRESHOLD_492MV = 12,
+	S2MU004_THRESHOLD_514MV = 13,
+	S2MU004_THRESHOLD_535MV = 14,
+	S2MU004_THRESHOLD_557MV = 15,
+	S2MU004_THRESHOLD_578MV = 16,
+	S2MU004_THRESHOLD_600MV = 17,
+	S2MU004_THRESHOLD_621MV = 18,
+	S2MU004_THRESHOLD_642MV = 19,
+	S2MU004_THRESHOLD_685MV = 20,
 
-#define DUAL_ROLE_SET_MODE_WAIT_MS 1500
-#endif
+	S2MU004_THRESHOLD_1328MV = 35,
+	S2MU004_THRESHOLD_1371MV = 36,
+	S2MU004_THRESHOLD_1414MV = 37,
+	S2MU004_THRESHOLD_1457MV = 38,
+	S2MU004_THRESHOLD_1500MV = 39,
+	S2MU004_THRESHOLD_1542MV = 40,
+	S2MU004_THRESHOLD_1587MV = 41,
+	S2MU004_THRESHOLD_1628MV = 42,
+	S2MU004_THRESHOLD_1671MV = 43,
+	S2MU004_THRESHOLD_1714MV = 44,
+	S2MU004_THRESHOLD_1757MV = 45,
+	S2MU004_THRESHOLD_1799MV = 46,
+	S2MU004_THRESHOLD_1842MV = 47,
+	S2MU004_THRESHOLD_1885MV = 48,
+	S2MU004_THRESHOLD_1928MV = 49,
+	S2MU004_THRESHOLD_1971MV = 50,
+	S2MU004_THRESHOLD_2014MV = 51,
+	S2MU004_THRESHOLD_2057MV = 52,
+	S2MU004_THRESHOLD_2099MV = 53,
+	S2MU004_THRESHOLD_2142MV = 54,
+	S2MU004_THRESHOLD_2185MV = 55,
+	S2MU004_THRESHOLD_2228MV = 56,
+	S2MU004_THRESHOLD_2271MV = 57,
+
+	S2MU004_THRESHOLD_MAX	 = 63
+} CCIC_THRESHOLD_SEL;
+
+typedef enum {
+        S2MU004_CC_OCP_255MV = 0,
+        S2MU004_CC_OCP_262MV = 1,
+        S2MU004_CC_OCP_273MV = 2,
+        S2MU004_CC_OCP_282MV = 3,
+        S2MU004_CC_OCP_301MV = 4,
+        S2MU004_CC_OCP_311MV = 5,
+        S2MU004_CC_OCP_327MV = 6,
+        S2MU004_CC_OCP_339MV = 7,
+        S2MU004_CC_OCP_375MV = 8,
+        S2MU004_CC_OCP_390MV = 9,
+        S2MU004_CC_OCP_415MV = 10,
+        S2MU004_CC_OCP_433MV = 11,
+        S2MU004_CC_OCP_478MV = 12,
+        S2MU004_CC_OCP_502MV = 13,
+        S2MU004_CC_OCP_542MV = 14,
+        S2MU004_CC_OCP_575MV = 15,
+
+        S2MU004_CC_OCP_MAX   = 16
+} CCIC_CC_OCP_SEL;
+
+enum s2mu004_power_role {
+	PDIC_SINK,
+	PDIC_SOURCE
+};
+
+enum s2mu004_pdic_rid {
+	REG_RID_UNDF = 0x00,
+	REG_RID_255K = 0x03,
+	REG_RID_301K = 0x04,
+	REG_RID_523K = 0x05,
+	REG_RID_619K = 0x06,
+	REG_RID_OPEN = 0x07,
+	REG_RID_MAX  = 0x08,
+};
+
 typedef enum {
 	CLIENT_OFF = 0,
 	CLIENT_ON = 1,
@@ -233,6 +440,35 @@ typedef enum {
 	HOST_OFF = 0,
 	HOST_ON = 1,
 } CCIC_HOST_REASON;
+
+typedef enum {
+	VBUS_OFF = 0,
+	VBUS_ON = 1,
+} CCIC_VBUS_SEL;
+
+typedef enum {
+	DET_HARD_RESET = 0,
+	DET_DETACH = 1,
+} CCIC_DETACH_TYPE;
+
+typedef enum {
+	PLUG_CTRL_RP0 = 0,
+	PLUG_CTRL_RP80 = 1,
+	PLUG_CTRL_RP180 = 2,
+	PLUG_CTRL_RP330 = 3
+} CCIC_RP_SCR_SEL;
+
+typedef enum {
+	TYPE_C_DETACH = 0,
+	TYPE_C_ATTACH_DFP = 1, /* Host */
+	TYPE_C_ATTACH_UFP = 2, /* Device */
+	TYPE_C_ATTACH_DRP = 3, /* Dual role */
+} CCIC_OTP_MODE;
+
+typedef enum {
+	PLUG_CTRL_RD = 0,
+	PLUG_CTRL_RP = 1,
+} CCIC_RP_RD_SEL;
 
 #if defined(CONFIG_CCIC_NOTIFIER)
 struct ccic_state_work {
@@ -253,7 +489,9 @@ struct s2mu004_usbpd_data {
 	struct mutex _mutex;
 	struct mutex poll_mutex;
 	struct mutex lpm_mutex;
+	struct mutex cc_mutex;
 	int vconn_en;
+	int regulator_en;
 	int irq_gpio;
 	int irq;
 	int power_role;
@@ -266,8 +504,10 @@ struct s2mu004_usbpd_data {
 	bool detach_valid;
 	bool is_factory_mode;
 	bool is_water_detect;
+	bool is_muic_water_detect;
 	bool is_otg_vboost;
 	bool is_otg_reboost;
+	int water_detect_cnt;
 	int check_msg_pass;
 	int rid;
 	int is_host;
@@ -275,6 +515,7 @@ struct s2mu004_usbpd_data {
 	int data_role_dual; /* data_role for dual role swap */
 	int power_role_dual; /* power_role for dual role swap */
 	int is_attached;
+	u8 rp_currentlvl; 
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	struct dual_role_phy_instance *dual_role;
 	struct dual_role_phy_desc *desc;
@@ -286,16 +527,21 @@ struct s2mu004_usbpd_data {
 	struct workqueue_struct *pdic_queue;
 	struct delayed_work plug_work;
 	struct s2mu004_pdic_notifier_struct pdic_notifier;
+	struct delayed_work water_detect_handler;
+	struct delayed_work water_dry_handler;
+
+	struct regulator *regulator;
 };
 
 extern int s2mu004_usbpd_get_adc(void);
 extern void s2mu004_usbpd_set_muic_type(int type);
 #if defined(CONFIG_CCIC_NOTIFIER)
 extern void s2mu004_control_option_command(struct s2mu004_usbpd_data *usbpd_data, int cmd);
-void select_pdo(int num);
-void ccic_event_work(void *data, int dest, int id, int attach, int event);
 #endif
-int s2mu004_set_lpm_mode(struct s2mu004_usbpd_data *pdic_data);
-int s2mu004_set_normal_mode(struct s2mu004_usbpd_data *pdic_data);
-
-#endif /* __S2MU004_H__ */
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
+extern void s2mu004_rprd_mode_change(struct s2mu004_usbpd_data *usbpd_data, u8 mode);
+#endif
+extern void vbus_turn_on_ctrl(struct s2mu004_usbpd_data *usbpd_data, bool enable);
+extern int s2mu004_set_lpm_mode(struct s2mu004_usbpd_data *pdic_data);
+extern int s2mu004_set_normal_mode(struct s2mu004_usbpd_data *pdic_data);
+#endif /* __USBPD_S2MU004_H__ */

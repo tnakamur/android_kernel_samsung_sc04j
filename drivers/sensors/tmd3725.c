@@ -58,6 +58,9 @@
 #define DEFAULT_ATIME                   0x11 /* 50.4 msec */
 #define DEFAULT_PRATE                   0x38 /* 5ms */
 #define DEFAULT_WTIME                   0x00 /* 2.8 msec */
+#ifdef CONFIG_SENSORS_TMD3725_RF_NOISE_DEFENCE_CODE
+#define DEFAULT_WTIME_FOR_PROX_ONLY     0x12 /* 53.2 msec */
+#endif
 #define DEFAULT_PPULSE                  0x96 /* ppulse_len: 16us, ppluse: 23 */
 #define DEFAULT_PGCFG1                  0x08 /* pagin 1x, pgldrive 54mA */
 #define DEFAULT_AGAIN                   0x02
@@ -81,7 +84,7 @@
 #define PERSIST_TIME_SET                0x30
 #define BINARY_SEARCH_SET               (0x03 << 5)
 #define CALIBRATION_SET                 0x01
-#define DEFAULT_LIGHT_POLL_DELAY        (200 * NSEC_PER_MSEC) /* 200 ms */
+#define DEFAULT_LIGHT_POLL_DELAY        100 /* 100 ms */
 #define DEFAULT_PROX_AVG_POLL_DELAY     (2000 * NSEC_PER_MSEC) /* 2 sec */
 
 /* driver data */
@@ -91,18 +94,18 @@ struct tmd3725_data {
 	struct input_dev *prox_input_dev;
 	struct device *light_dev;
 	struct device *prox_dev;
-	struct work_struct work_light;
 	struct work_struct work_prox;
 	struct work_struct work_prox_avg;
+	struct mutex mode_lock;
 	struct mutex prox_mutex;
 	struct mutex enable_lock;
 	struct wake_lock prx_wake_lock;
-	struct hrtimer light_timer;
 	struct hrtimer prox_avg_timer;
+	struct delayed_work work_light;
 	struct workqueue_struct *wq;
 	struct workqueue_struct *prox_avg_wq;
 	struct regulator *prox_vled;
-	ktime_t light_poll_delay;
+	int64_t light_poll_delay;
 	ktime_t prox_avg_poll_delay;
 
 	u8 power_state;
@@ -236,6 +239,8 @@ static void tmd3725_clear_interrupt(struct tmd3725_data *taos)
 {
 	int ret;
 
+	SENSOR_INFO("called\n");
+
 	ret = tmd3725_i2c_read_data(taos, STATUS);
 	if (ret < 0)
 		SENSOR_ERR("failed %d\n", ret);
@@ -305,7 +310,7 @@ static int tmd3725_light_get_lux(struct tmd3725_data *taos)
 		if (ret < 0)
 			SENSOR_ERR("failed %d\n", ret);
 
-		return taos->lux;
+		return -1;
 	} else if (gain == 16 && taos->clear > LIMIT_GAIN_16_CLEAR_DATA) {
 		reg_gain = 0x00; /* Gain 1x */
 
@@ -313,7 +318,7 @@ static int tmd3725_light_get_lux(struct tmd3725_data *taos)
 		if (ret < 0)
 			SENSOR_ERR("failed %d\n", ret);
 
-		return taos->lux;
+		return -1;
 	}
 
 	if ((taos->clear >= LIMIT_MAX_CLEAR_DATA) && (gain == 1))
@@ -395,14 +400,18 @@ static int tmd3725_set_op_mode(struct tmd3725_data *taos, u16 op_mode, u8 state)
 	u8 intenab_val, enable_val;
 	int ret = -1;
 
+	mutex_lock(&taos->mode_lock);
+
 	if (state)
 		taos->op_mode_state |= (op_mode << 0);
 	else
 		taos->op_mode_state &= ~(op_mode << 0);
 
+	if (op_mode == MODE_PROX)
+		tmd3725_clear_interrupt(taos);
+
 	switch (taos->op_mode_state) {
 	case MODE_OFF:
-		tmd3725_clear_interrupt(taos);
 		intenab_val = CNTL_REG_CLEAR;
 		enable_val = CNTL_PWRON;
 		break;
@@ -411,30 +420,42 @@ static int tmd3725_set_op_mode(struct tmd3725_data *taos, u16 op_mode, u8 state)
 		enable_val = PON | AEN;
 		break;
 	case MODE_PROX:
-		tmd3725_clear_interrupt(taos);
+		if (taos->prox_cal_complete == false) {
+			SENSOR_INFO("returned in MODE_PROX\n");
+			mutex_unlock(&taos->mode_lock);
+			return 0;
+		}
 		intenab_val = PIEN | ZIEN;
 		enable_val = PEN | PON | WEN;
 		break;
 	case MODE_ALS_PROX:
-		tmd3725_clear_interrupt(taos);
+		if (taos->prox_cal_complete == false) {
+			SENSOR_INFO("returned in MODE_ALS_PROX\n");
+			mutex_unlock(&taos->mode_lock);
+			return 0;
+		}
 		intenab_val = PIEN | ZIEN;
 		enable_val = PEN | PON | AEN | WEN;
 		break;
 	default:
+		mutex_unlock(&taos->mode_lock);
 		return ret;
 	}
 
 	ret = tmd3725_i2c_write_data(taos, INTENAB, intenab_val);
 	if (ret < 0) {
 		SENSOR_ERR("INTENAB failed %d\n", ret);
+		mutex_unlock(&taos->mode_lock);
 		return ret;
 	}
 	ret = tmd3725_i2c_write_data(taos, CMD_REG, enable_val);
 	if (ret < 0) {
 		SENSOR_ERR("CMD_REG failed %d\n", ret);
+		mutex_unlock(&taos->mode_lock);
 		return ret;
 	}
 
+	mutex_unlock(&taos->mode_lock);
 	return 0;
 }
 
@@ -442,27 +463,29 @@ static void tmd3725_light_enable(struct tmd3725_data *taos)
 {
 	SENSOR_INFO("start poll timer\n");
 	taos->count_log_time = LIGHT_LOG_TIME;
-	hrtimer_start(&taos->light_timer,
-		taos->light_poll_delay, HRTIMER_MODE_REL);
+	schedule_delayed_work(&taos->work_light,
+		msecs_to_jiffies(DEFAULT_LIGHT_POLL_DELAY));
 }
 
 static void tmd3725_light_disable(struct tmd3725_data *taos)
 {
 	SENSOR_INFO("cancelling poll timer\n");
-	hrtimer_cancel(&taos->light_timer);
-	cancel_work_sync(&taos->work_light);
+	cancel_delayed_work_sync(&taos->work_light);
 }
 
 static void tmd3725_work_func_light(struct work_struct *work)
 {
-	struct tmd3725_data *taos = container_of(work, struct tmd3725_data,
-					work_light);
+	struct tmd3725_data *taos = container_of((struct delayed_work *)work,
+			struct tmd3725_data, work_light);
+
 	int lux = tmd3725_light_get_lux(taos);
 	int cct = tmd3725_light_get_cct(taos);
 
-	input_report_rel(taos->light_input_dev, REL_MISC, lux + 1);
-	input_report_rel(taos->light_input_dev, REL_WHEEL, cct);
-	input_sync(taos->light_input_dev);
+	if (lux < 0) {
+		schedule_delayed_work(&taos->work_light,
+			msecs_to_jiffies(DEFAULT_LIGHT_POLL_DELAY));
+		return;
+	}
 
 	if (taos->count_log_time >= LIGHT_LOG_TIME) {
 		SENSOR_INFO("R:%d G:%d B:%d C:%d lux:%d again:%d\n",
@@ -472,6 +495,13 @@ static void tmd3725_work_func_light(struct work_struct *work)
 	} else {
 		taos->count_log_time++;
 	}
+
+	input_report_rel(taos->light_input_dev, REL_MISC, lux + 1);
+	input_report_rel(taos->light_input_dev, REL_WHEEL, cct);
+	input_sync(taos->light_input_dev);
+
+	schedule_delayed_work(&taos->work_light,
+		msecs_to_jiffies(taos->light_poll_delay));
 }
 
 static int tmd3725_prox_get_adc(struct tmd3725_data *taos)
@@ -589,6 +619,8 @@ static void tmd3725_prox_initialize_target(struct tmd3725_data *taos)
 {
 	int ret;
 
+	mutex_lock(&taos->mode_lock);
+
 	SENSOR_INFO("Calibration Start !!!\n");
 
 	ret = tmd3725_i2c_write_data(taos, ENABLE, PON);
@@ -622,6 +654,8 @@ static void tmd3725_prox_initialize_target(struct tmd3725_data *taos)
 
 	taos->prox_cal_complete = false;
 	taos->op_mode_state |= (MODE_PROX << 0);
+
+	mutex_unlock(&taos->mode_lock);
 }
 
 static void tmd3725_prox_send_event(struct tmd3725_data *taos, int val)
@@ -631,6 +665,21 @@ static void tmd3725_prox_send_event(struct tmd3725_data *taos, int val)
 
 	SENSOR_INFO("prox value = %d\n", val);
 }
+
+#ifdef CONFIG_SENSORS_TMD3725_RF_NOISE_DEFENCE_CODE
+static void tmd3725_change_wtime(struct tmd3725_data *taos, int val)
+{
+	int ret;
+
+	taos->wtime = val;
+
+	ret = tmd3725_i2c_write_data(taos, WAIT_TIME, taos->wtime);
+	if (ret < 0)
+		SENSOR_ERR("failed to write als wait time reg %d\n", ret);
+	else
+		SENSOR_INFO("change wait time reg %d\n", taos->wtime);
+}
+#endif
 
 static void tmd3725_prox_process_state(struct tmd3725_data *taos)
 {
@@ -784,10 +833,12 @@ static void tmd3725_work_func_prox(struct work_struct *work)
 		return;
 	}
 
-	if (status & PINT)
+	if (status & PINT) {
 		if (taos->prox_cal_complete == true)
 			tmd3725_prox_process_state(taos);
-
+		else
+			SENSOR_INFO("prox cal is not completed!!\n");
+	}
 }
 
 irqreturn_t tmd3725_prox_irq_handler(int irq, void *data)
@@ -801,17 +852,6 @@ irqreturn_t tmd3725_prox_irq_handler(int irq, void *data)
 
 	SENSOR_INFO("taos interrupt handler is called\n");
 	return IRQ_HANDLED;
-}
-
-static enum hrtimer_restart tmd3725_light_timer_func(struct hrtimer *timer)
-{
-	struct tmd3725_data *taos =
-		container_of(timer, struct tmd3725_data, light_timer);
-
-	queue_work(taos->wq, &taos->work_light);
-	hrtimer_forward_now(&taos->light_timer, taos->light_poll_delay);
-
-	return HRTIMER_RESTART;
 }
 
 static enum hrtimer_restart tmd3725_prox_avg_timer_func(struct hrtimer *timer)
@@ -829,8 +869,7 @@ static ssize_t tmd3725_light_poll_delay_show(struct device *dev,
 {
 	struct tmd3725_data *taos = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%lld\n",
-		ktime_to_ns(taos->light_poll_delay));
+	return snprintf(buf, PAGE_SIZE, "%lld\n", taos->light_poll_delay);
 }
 
 static ssize_t tmd3725_light_poll_delay_store(struct device *dev,
@@ -845,17 +884,19 @@ static ssize_t tmd3725_light_poll_delay_store(struct device *dev,
 		SENSOR_ERR("invalid value %d\n", err);
 		return size;
 	}
-	SENSOR_INFO("new delay = %lldns, old delay = %lldns\n",
-		new_delay, ktime_to_ns(taos->light_poll_delay));
+
+	SENSOR_INFO("new delay = %lldns, old delay = %lldms\n",
+		new_delay, taos->light_poll_delay);
 
 	mutex_lock(&taos->enable_lock);
-	if (new_delay != ktime_to_ns(taos->light_poll_delay)) {
-		taos->light_poll_delay = ns_to_ktime(new_delay);
+	if ((new_delay / NSEC_PER_MSEC) != (taos->light_poll_delay)) {
+		taos->light_poll_delay = new_delay / NSEC_PER_MSEC;
 		if (taos->power_state & LIGHT_ENABLED) {
 			tmd3725_light_disable(taos);
 			tmd3725_light_enable(taos);
 		}
 	}
+
 	mutex_unlock(&taos->enable_lock);
 
 	return size;
@@ -891,11 +932,17 @@ static ssize_t tmd3725_light_enable_store(struct device *dev,
 	mutex_lock(&taos->enable_lock);
 	if (new_value && !(taos->power_state & LIGHT_ENABLED)) {
 		taos->power_state |= LIGHT_ENABLED;
+#ifdef CONFIG_SENSORS_TMD3725_RF_NOISE_DEFENCE_CODE
+		tmd3725_change_wtime(taos, DEFAULT_WTIME);
+#endif
 		tmd3725_set_op_mode(taos, MODE_ALS, ON);
 		tmd3725_light_enable(taos);
 	} else if (!new_value && (taos->power_state & LIGHT_ENABLED)) {
 		tmd3725_light_disable(taos);
 		tmd3725_set_op_mode(taos, MODE_ALS, OFF);
+#ifdef CONFIG_SENSORS_TMD3725_RF_NOISE_DEFENCE_CODE
+		tmd3725_change_wtime(taos, DEFAULT_WTIME_FOR_PROX_ONLY);
+#endif
 		taos->power_state &= ~LIGHT_ENABLED;
 	}
 	mutex_unlock(&taos->enable_lock);
@@ -1433,11 +1480,15 @@ static int tmd3725_parse_dt(struct tmd3725_data *taos, struct device *dev)
 	if (of_property_read_u32(np, "taos,lux_mul", &taos->lux_mul) < 0)
 		taos->lux_mul = DEFAULT_LUX_MULTIPLE;
 
-	taos->als_time = DEFAULT_ATIME;
-	taos->prate = DEFAULT_PRATE;
-	taos->wtime = DEFAULT_WTIME;
 	taos->ppulse = DEFAULT_PPULSE;
 	taos->pgcfg1 = DEFAULT_PGCFG1;
+	taos->als_time = DEFAULT_ATIME;
+	taos->prate = DEFAULT_PRATE;
+#ifdef CONFIG_SENSORS_TMD3725_RF_NOISE_DEFENCE_CODE
+	taos->wtime = DEFAULT_WTIME_FOR_PROX_ONLY;
+#else
+	taos->wtime = DEFAULT_WTIME;
+#endif
 	taos->als_gain = DEFAULT_AGAIN;
 
 	return 0;
@@ -1488,6 +1539,7 @@ static int tmd3725_i2c_probe(struct i2c_client *client,
 		"prx_wake_lock");
 	mutex_init(&taos->prox_mutex);
 	mutex_init(&taos->enable_lock);
+	mutex_init(&taos->mode_lock);
 
 	/* allocate proximity input_device */
 	taos->prox_input_dev = input_allocate_device();
@@ -1526,12 +1578,6 @@ static int tmd3725_i2c_probe(struct i2c_client *client,
 		SENSOR_ERR("could not create sysfs group\n");
 		goto err_create_sensorgoup_proximity;
 	}
-
-	/* hrtimer settings.  we poll for light values using a timer. */
-	hrtimer_init(&taos->light_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	taos->light_poll_delay = ns_to_ktime(DEFAULT_LIGHT_POLL_DELAY);
-	taos->light_timer.function = tmd3725_light_timer_func;
-
 	/* the timer just fires off a work queue request.  we need a thread
 	   to read the i2c (can be slow and blocking). */
 	taos->wq = create_singlethread_workqueue("tmd3725_wq");
@@ -1550,7 +1596,8 @@ static int tmd3725_i2c_probe(struct i2c_client *client,
 	}
 
 	/* this is the thread function we run on the work queue */
-	INIT_WORK(&taos->work_light, tmd3725_work_func_light);
+	INIT_DELAYED_WORK(&taos->work_light, tmd3725_work_func_light);
+	taos->light_poll_delay = DEFAULT_LIGHT_POLL_DELAY;
 	INIT_WORK(&taos->work_prox, tmd3725_work_func_prox);
 	INIT_WORK(&taos->work_prox_avg, tmd3725_work_func_prox_avg);
 
@@ -1636,6 +1683,7 @@ err_sensor_register_device_proximity:
 	input_unregister_device(taos->prox_input_dev);
 err_input_register_device_proximity:
 err_input_allocate_device_proximity:
+	mutex_destroy(&taos->mode_lock);
 	mutex_destroy(&taos->enable_lock);
 	mutex_destroy(&taos->prox_mutex);
 	wake_lock_destroy(&taos->prx_wake_lock);

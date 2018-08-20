@@ -456,13 +456,7 @@ static int oob_task(void *pm_oob)
 						((status < CNSS_STATUS_COUNT) ?
 						 irq_handle_status[status]++ :
 						 irq_handle_status[CNSS_STATUS_COUNT-1]++);
-					if (status != CNSS_FAKE_STATUS) {
-						err_cnt++;
-						if (err_cnt > CNSS_MAX_ERR)
-							panic("Wifi bus error\n");
-					} else {
-						break;
-					}
+					break;
 				}
 			}
 			if (irq_pending_count) {

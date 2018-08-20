@@ -1778,6 +1778,9 @@ static int exynos_iommu_map(struct iommu_domain *domain, unsigned long iova,
 	if (size >= SECT_SIZE) {
 		ret = lv1set_section(priv, entry, paddr, size,
 				&priv->lv2entcnt[lv1ent_offset(iova)]);
+
+		SYSMMU_EVENT_LOG_IOMMU_MAP(IOMMU_PRIV_TO_LOG(priv),
+				iova, iova + size, paddr / SPAGE_SIZE);
 	} else {
 		sysmmu_pte_t *pent;
 		pent = alloc_lv2entry(priv, entry, iova,
@@ -1912,6 +1915,8 @@ unmap_flpd:
 	}
 
 done:
+	SYSMMU_EVENT_LOG_IOMMU_UNMAP(IOMMU_PRIV_TO_LOG(priv),
+						iova, iova + size);
 	exynos_iommu_tlb_invalidate_entry(priv, iova);
 
 	/* TLB invalidation is performed by IOVMM */

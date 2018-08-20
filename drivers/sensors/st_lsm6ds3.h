@@ -18,7 +18,7 @@
 #include <linux/sensor/sensors_core.h>
 #include <linux/wakelock.h>
 
-#define LSM6DS3_DEV_NAME		"LSM6DS3"
+#define DEV_NAME			"K6DS3TR"
 #define VENDOR_NAME			"STM"
 #define MODULE_NAME_ACC			"accelerometer_sensor"
 #define MODULE_NAME_GYRO		"gyro_sensor"
@@ -191,6 +191,7 @@ struct lsm6ds3_data {
 	struct lsm6ds3_sensor_data *sdata;
 
 	int lpf_on;
+	u16 stable_count;
 };
 
 int st_lsm6ds3_common_probe(struct lsm6ds3_data *cdata, int irq);

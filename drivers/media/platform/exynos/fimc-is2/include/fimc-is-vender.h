@@ -61,6 +61,7 @@ void fimc_is_sec_copy_err_cnt_to_file(void);
 int fimc_is_sec_get_rear_hw_param(struct cam_hw_param **hw_param);
 int fimc_is_sec_get_front_hw_param(struct cam_hw_param **hw_param);
 int fimc_is_sec_get_iris_hw_param(struct cam_hw_param **hw_param);
+bool fimc_is_sec_is_valid_moduleid(char* moduleid);
 #endif
 
 void fimc_is_vendor_csi_stream_on(struct fimc_is_device_csi *csi);

@@ -1,6 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2010-2016 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2017 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -42,9 +42,6 @@
 #include <mali_kbase_hwaccess_jm.h>
 #include <mali_kbase_time.h>
 #include <mali_kbase_mem.h>
-
-/* MALI_SEC_INTEGRATION */
-#include "./platform/exynos/gpu_control.h"
 
 #define KBASE_MMU_PAGE_ENTRIES 512
 
@@ -835,9 +832,7 @@ int kbase_mmu_insert_pages(struct kbase_context *kctx, u64 vpfn,
 	int err;
 
 	err = kbase_mmu_insert_pages_no_flush(kctx, vpfn, phys, nr, flags);
-	/* MALI_SEC_INTEGRATION */
-	if (gpu_is_power_on())
-		kbase_mmu_flush_invalidate(kctx, vpfn, nr, false);
+	kbase_mmu_flush_invalidate(kctx, vpfn, nr, false);
 	return err;
 }
 
@@ -921,8 +916,8 @@ static void kbase_mmu_flush_invalidate(struct kbase_context *kctx,
 	if (ctx_is_in_runpool) {
 		KBASE_DEBUG_ASSERT(kctx->as_nr != KBASEP_AS_NR_INVALID);
 
-		if (!kbase_pm_context_active_handle_suspend(kbdev,
-			KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
+		if (!kbase_pm_context_hold_noactivate_handle_suspend(kbdev,
+				KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE)) {
 			int err;
 			u32 op;
 

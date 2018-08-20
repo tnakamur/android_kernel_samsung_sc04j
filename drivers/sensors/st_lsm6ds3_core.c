@@ -698,6 +698,12 @@ int st_lsm6ds3_gyro_set_enable(struct lsm6ds3_data *cdata, bool enable)
 		if (err < 0)
 			return err;
 
+		/* Gyro sensor data is not stable till 50 ms,
+		 * so need to skip reporting data till 50 ms using hrtimers for precision.
+		 * stable_count is 10 for 200Hz, 5 for 100Hz, 2 for 50Hz, 0 for 15Hz/5Hz
+		 */
+		cdata->stable_count = 50000000 / ktime_to_ns(cdata->delay);
+
 		cdata->sensors_enabled |= (1 << ST_INDIO_DEV_GYRO);
 
 		hrtimer_start(&cdata->gyro_timer, cdata->gyro_delay,
@@ -1720,6 +1726,107 @@ static ssize_t st_lsm6ds3_acc_sysfs_get_selftest_run(struct device *dev,
 	return ret;
 }
 
+static int st_lsm6ds3_set_extra_dependency(struct lsm6ds3_data *cdata,
+								bool enable)
+{
+	int err;
+
+	if (!(cdata->sensors_enabled & ST_LSM6DS3_ACCEL_DEPENDENCY)) {
+		if (enable) {
+			err = st_lsm6ds3_write_data_with_mask(cdata,
+				st_lsm6ds3_odr_table.addr[ST_INDIO_DEV_ACCEL],
+				st_lsm6ds3_odr_table.mask[ST_INDIO_DEV_ACCEL],
+				st_lsm6ds3_odr_table.odr_avl[ST_LSM6DS3_ODR_26HZ].value);
+
+			if (err < 0)
+				return err;
+		} else {
+			err = st_lsm6ds3_write_data_with_mask(cdata,
+				st_lsm6ds3_odr_table.addr[ST_INDIO_DEV_ACCEL],
+				st_lsm6ds3_odr_table.mask[ST_INDIO_DEV_ACCEL],
+				ST_LSM6DS3_ODR_POWER_OFF_VAL);
+
+			if (err < 0)
+				return err;
+		}
+	}
+
+	if (!(cdata->sensors_enabled & ST_LSM6DS3_EXTRA_DEPENDENCY)) {
+		if (enable) {
+			err = st_lsm6ds3_write_data_with_mask(cdata,
+				ST_LSM6DS3_FUNC_EN_ADDR,
+				ST_LSM6DS3_FUNC_EN_MASK, ST_LSM6DS3_EN_BIT);
+
+			if (err < 0)
+				return err;
+		} else {
+			err = st_lsm6ds3_write_data_with_mask(cdata,
+				ST_LSM6DS3_FUNC_EN_ADDR,
+				ST_LSM6DS3_FUNC_EN_MASK, ST_LSM6DS3_DIS_BIT);
+
+			if (err < 0)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
+static int st_lsm6ds3_enable_step_c(struct lsm6ds3_data *cdata, bool enable)
+{
+	int err;
+	u8 value = ST_LSM6DS3_DIS_BIT;
+
+	if (enable)
+		value = ST_LSM6DS3_EN_BIT;
+
+	err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_STEP_COUNTER_EN_ADDR,
+					0x01, value);
+	if (err < 0)
+		return err;
+
+	err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_STEP_COUNTER_EN_ADDR,
+					ST_LSM6DS3_STEP_COUNTER_EN_MASK, value);
+	if (err < 0)
+		return err;
+
+	if (!(cdata->sensors_enabled & (1 << ST_INDIO_DEV_TILT))) {
+		err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_TILT_EN_ADDR,
+					ST_LSM6DS3_TILT_EN_MASK, value);
+		if (err < 0)
+			return err;
+	}
+
+	err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_INT1_ADDR,
+					0x80, value);
+	if (err < 0)
+		return err;
+
+	err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_INT1_ADDR,
+					ST_LSM6DS3_SIGN_MOTION_DRDY_IRQ_MASK,
+					value);
+	if (err < 0)
+		return err;
+
+	err = st_lsm6ds3_write_data_with_mask(cdata,
+					ST_LSM6DS3_SIGN_MOTION_EN_ADDR,
+					ST_LSM6DS3_SIGN_MOTION_EN_MASK,
+					value);
+	if (err < 0)
+		return err;
+
+	err = st_lsm6ds3_set_extra_dependency(cdata, enable);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+
 void st_lsm6ds3_set_irq(struct lsm6ds3_data *cdata, bool enable)
 {
 
@@ -1732,11 +1839,11 @@ void st_lsm6ds3_set_irq(struct lsm6ds3_data *cdata, bool enable)
 			enable_irq(cdata->irq);
 		}
 	} else if (cdata->states != 0 && enable == 0) {
-		if (cdata->states == 1) {
+		cdata->states--;
+		if (cdata->states == 0) {
 			disable_irq_wake(cdata->irq);
 			disable_irq_nosync(cdata->irq);
 			SENSOR_INFO("disable irq come (%d)\n", cdata->irq);
-			cdata->states = 0;
 		}
 		SENSOR_INFO("disable state count:(%d)\n", cdata->states);
 	}
@@ -1806,10 +1913,13 @@ static void st_lsm6ds3_irq_management(struct work_struct *data_work)
 
 	if ((src_value_reg2 & ST_LSM6DS3_SRC_SIGN_MOTION_DATA_AVL)
 		|| (src_value_reg2 & ST_LSM6DS3_SRC_STEP_COUNTER_DATA_AVL)) {
-		SENSOR_INFO("########### SMD ############\n");
+		SENSOR_INFO("########## SMD (0x%x)#########\n", src_value_reg2);
 		input_report_rel(cdata->smd_input, REL_MISC, 1);
 		input_sync(cdata->smd_input);
 		wake_lock_timeout(&cdata->sa_wake_lock, msecs_to_jiffies(3000));
+
+		cdata->sensors_enabled &= ~(1 << ST_INDIO_DEV_SIGN_MOTION);
+		st_lsm6ds3_enable_step_c(cdata, false);
 	}
 
 	if (src_value_reg2 & ST_LSM6DS3_SRC_TILT_DATA_AVL) {
@@ -1971,108 +2081,6 @@ static ssize_t st_lsm6ds3_sysfs_set_smart_alert(struct device *dev,
 	return size;
 }
 
-static int st_lsm6ds3_set_extra_dependency(struct lsm6ds3_data *cdata,
-								bool enable)
-{
-	int err;
-
-	if (!(cdata->sensors_enabled & ST_LSM6DS3_ACCEL_DEPENDENCY)) {
-		if (enable) {
-			err = st_lsm6ds3_write_data_with_mask(cdata,
-				st_lsm6ds3_odr_table.addr[ST_INDIO_DEV_ACCEL],
-				st_lsm6ds3_odr_table.mask[ST_INDIO_DEV_ACCEL],
-				st_lsm6ds3_odr_table.odr_avl[ST_LSM6DS3_ODR_26HZ].value);
-
-				if (err < 0)
-					return err;
-		} else {
-			err = st_lsm6ds3_write_data_with_mask(cdata,
-				st_lsm6ds3_odr_table.addr[ST_INDIO_DEV_ACCEL],
-				st_lsm6ds3_odr_table.mask[ST_INDIO_DEV_ACCEL],
-				ST_LSM6DS3_ODR_POWER_OFF_VAL);
-
-				if (err < 0)
-					return err;
-		}
-	}
-
-	if (!(cdata->sensors_enabled & ST_LSM6DS3_EXTRA_DEPENDENCY)) {
-		if (enable) {
-			err = st_lsm6ds3_write_data_with_mask(cdata,
-				ST_LSM6DS3_FUNC_EN_ADDR,
-				ST_LSM6DS3_FUNC_EN_MASK, ST_LSM6DS3_EN_BIT);
-
-			if (err < 0)
-				return err;
-		} else {
-			err = st_lsm6ds3_write_data_with_mask(cdata,
-				ST_LSM6DS3_FUNC_EN_ADDR,
-				ST_LSM6DS3_FUNC_EN_MASK, ST_LSM6DS3_DIS_BIT);
-
-			if (err < 0)
-				return err;
-		}
-	}
-
-	return 0;
-}
-
-static int st_lsm6ds3_enable_step_c(struct lsm6ds3_data *cdata, bool enable)
-{
-	int err;
-	u8 value = ST_LSM6DS3_DIS_BIT;
-
-	if (enable)
-		value = ST_LSM6DS3_EN_BIT;
-
-	/* FUNC_EN */
-	err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_CTRL10_ADDR,
-					0x04, value);
-	if (err < 0)
-		return err;
-
-	err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_STEP_COUNTER_EN_ADDR,
-					0x01, value);
-	if (err < 0)
-		return err;
-
-	err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_STEP_COUNTER_EN_ADDR,
-					ST_LSM6DS3_STEP_COUNTER_EN_MASK, value);
-	if (err < 0)
-		return err;
-
-	if (!(cdata->sensors_enabled & (1 << ST_INDIO_DEV_TILT))) {
-		err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_TILT_EN_ADDR,
-					ST_LSM6DS3_TILT_EN_MASK, value);
-		if (err < 0)
-			return err;
-	}
-
-	err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_INT1_ADDR,
-					0x80, value);
-	if (err < 0)
-		return err;
-
-	err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_INT1_ADDR,
-					ST_LSM6DS3_SIGN_MOTION_DRDY_IRQ_MASK,
-					value);
-	if (err < 0)
-		return err;
-
-	err = st_lsm6ds3_set_extra_dependency(cdata, enable);
-	if (err < 0)
-		return err;
-
-	return 0;
-}
-
-
 static enum hrtimer_restart gyro_timer_func(struct hrtimer *timer)
 {
 	struct lsm6ds3_data *cdata = container_of(timer,
@@ -2186,8 +2194,14 @@ static void st_lsm6ds3_gyro_work_func(struct work_struct *work)
 		ST_LSM6DS3_GYRO_OUT_X_L_ADDR,
 		ST_LSM6DS3_BYTE_FOR_CHANNEL * ST_LSM6DS3_NUMBER_DATA_CHANNELS,
 		buf);
+
 	if (len < 0)
 		goto exit;
+
+	if (cdata->stable_count > 0) {
+		cdata->stable_count--;
+		goto exit;
+	}
 
 	/* Applying rotation matrix */
 	for (n = 0; n < ST_LSM6DS3_NUMBER_DATA_CHANNELS; n++) {
@@ -2411,7 +2425,8 @@ static ssize_t st_lsm6ds3_smd_enable_show(struct device *dev,
 	struct input_dev *input = to_input_dev(dev);
 	struct lsm6ds3_data *cdata = input_get_drvdata(input);
 
-	return snprintf(buf, 16, "%d\n", atomic_read(&cdata->wkqueue_en));
+	return snprintf(buf, 16, "%d\n",
+				!!(cdata->sensors_enabled & (1 << ST_INDIO_DEV_SIGN_MOTION)));
 }
 
 static ssize_t st_lsm6ds3_smd_enable_store(struct device *dev,
@@ -2438,27 +2453,13 @@ static ssize_t st_lsm6ds3_smd_enable_store(struct device *dev,
 			mutex_unlock(&cdata->mutex_enable);
 			return count;
 		}
-		err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_SIGN_MOTION_EN_ADDR,
-					ST_LSM6DS3_SIGN_MOTION_EN_MASK,
-					ST_LSM6DS3_EN_BIT);
-		if (err < 0) {
-			mutex_unlock(&cdata->mutex_enable);
-			return count;
-		}
+
 		st_lsm6ds3_set_irq(cdata, 1);
 		cdata->sensors_enabled |= (1 << ST_INDIO_DEV_SIGN_MOTION);
 	} else {
 		cdata->sensors_enabled &= ~(1 << ST_INDIO_DEV_SIGN_MOTION);
 		st_lsm6ds3_set_irq(cdata, 0);
-		err = st_lsm6ds3_write_data_with_mask(cdata,
-					ST_LSM6DS3_SIGN_MOTION_EN_ADDR,
-					ST_LSM6DS3_SIGN_MOTION_EN_MASK,
-					ST_LSM6DS3_DIS_BIT);
-		if (err < 0) {
-			mutex_unlock(&cdata->mutex_enable);
-			return count;
-		}
+
 		err = st_lsm6ds3_enable_step_c(cdata, false);
 		if (err < 0) {
 			mutex_unlock(&cdata->mutex_enable);
@@ -2476,8 +2477,8 @@ static ssize_t st_lsm6ds3_tilt_enable_show(struct device *dev,
 	struct input_dev *input = to_input_dev(dev);
 	struct lsm6ds3_data *cdata = input_get_drvdata(input);
 
-	return snprintf(buf, 16, "%d\n", atomic_read(&cdata->wkqueue_en));
-
+	return snprintf(buf, 16, "%d\n",
+			!!(cdata->sensors_enabled & (1 << ST_INDIO_DEV_TILT)));
 }
 
 static ssize_t st_lsm6ds3_tilt_enable_store(struct device *dev,
@@ -2782,7 +2783,7 @@ static ssize_t st_lsm6ds3_vendor_show(struct device *dev,
 static ssize_t st_lsm6ds3_name_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n", LSM6DS3_DEV_NAME);
+	return snprintf(buf, PAGE_SIZE, "%s\n", DEV_NAME);
 }
 
 static int st_lsm6ds3_set_lpf(struct lsm6ds3_data *cdata, int onoff)
@@ -3359,7 +3360,7 @@ int st_lsm6ds3_common_probe(struct lsm6ds3_data *cdata, int irq)
 
 	if (cdata->irq > 0) {
 		wake_lock_init(&cdata->sa_wake_lock, WAKE_LOCK_SUSPEND,
-		       LSM6DS3_DEV_NAME "_sa_wake_lock");
+			DEV_NAME "_sa_wake_lock");
 
 		INIT_WORK(&cdata->data_work, st_lsm6ds3_irq_management);
 		INIT_DELAYED_WORK(&cdata->sa_irq_work, st_lsm6ds3_sa_irq_work);

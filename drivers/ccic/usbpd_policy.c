@@ -16,10 +16,11 @@
 #include <linux/muic/muic_notifier.h>
 #endif /* CONFIG_MUIC_NOTIFIER */
 
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-#include <linux/battery/battery_notifier.h>
-#endif
 #include <linux/usb_notify.h>
+
+#if (defined CONFIG_CCIC_NOTIFIER || defined CONFIG_DUAL_ROLE_USB_INTF)
+#include <linux/ccic/usbpd_ext.h>
+#endif
 
 #define CHECK_MSG(pd, msg, ret) do {\
 	if (pd->phy_ops.get_status(pd, msg))\
@@ -32,10 +33,6 @@
 			return ret;\
 		} \
 	} while (0);
-
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-extern struct pdic_notifier_struct pd_noti;
-#endif
 
 policy_state usbpd_policy_src_startup(struct policy_data *policy)
 {
@@ -95,6 +92,8 @@ policy_state usbpd_policy_src_send_capabilities(struct policy_data *policy)
 				"%s NoResponseTimer\n", __func__);
 			goto hard_reset;
 		} else {	/* not receive good crc */
+			if (policy->abnormal_state)
+				return PE_SRC_Send_Capabilities;
 			return PE_SRC_Discovery;
 		}
 	} else
@@ -265,6 +264,7 @@ policy_state usbpd_policy_src_hard_reset(struct policy_data *policy)
 	msleep(tPSHardReset);
 
 	pd_data->phy_ops.hard_reset(pd_data);
+	pd_data->phy_ops.set_cc_control(pd_data, USBPD_CC_OFF);
 	pd_data->counter.hard_reset_counter++;
 
 	return PE_SRC_Transition_to_default;
@@ -377,6 +377,8 @@ policy_state usbpd_policy_src_send_soft_reset(struct policy_data *policy)
 		pd_data->policy.state = PE_SRC_Send_Soft_Reset;
 		if (usbpd_wait_msg(pd_data, MSG_ACCEPT, tSenderResponse))
 			return PE_SRC_Send_Capabilities;
+		if (policy->abnormal_state)
+			return PE_SRC_Send_Soft_Reset;
 	}
 	return PE_SRC_Hard_Reset;
 }
@@ -398,6 +400,9 @@ policy_state usbpd_policy_snk_startup(struct policy_data *policy)
 
 	dev_info(pd_data->dev, "%s\n", __func__);
 	usbpd_init_protocol(pd_data);
+
+	pd_data->phy_ops.set_cc_control(pd_data, USBPD_CC_ON);
+
 	return PE_SNK_Discovery;
 }
 
@@ -442,8 +447,13 @@ policy_state usbpd_policy_snk_evaluate_capability(struct policy_data *policy)
 	usbpd_protocol_rx(pd_data);
 
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-	if (pd_noti.sink_status.selected_pdo_num == 0)
+	if (pd_noti.sink_status.selected_pdo_num == 0) {
 		pd_noti.sink_status.selected_pdo_num = 1;
+		if (policy->sink_cap_received) {
+			policy->send_sink_cap = 1;
+			policy->sink_cap_received = 0;
+		}
+	}
 #endif
 	sink_request_obj_num = usbpd_manager_evaluate_capability(pd_data);
 
@@ -503,6 +513,9 @@ policy_state usbpd_policy_snk_transition_sink(struct policy_data *policy)
 		return PE_SNK_Ready;
 	}
 
+	if (policy->abnormal_state)
+		return PE_SNK_Transition_Sink;
+
 	return PE_SNK_Hard_Reset;
 }
 
@@ -550,7 +563,7 @@ policy_state usbpd_policy_snk_hard_reset(struct policy_data *policy)
 	dev_info(pd_data->dev, "%s\n", __func__);
 
 	pd_data->phy_ops.hard_reset(pd_data);
-
+	pd_data->phy_ops.set_cc_control(pd_data, USBPD_CC_OFF);
 	/* increase hard reset counter */
 	pd_data->counter.hard_reset_counter++;
 
@@ -575,24 +588,17 @@ policy_state usbpd_policy_snk_transition_to_default(struct policy_data *policy)
 policy_state usbpd_policy_snk_give_sink_cap(struct policy_data *policy)
 {
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
-	struct usbpd_manager_data *manager = &pd_data->manager;
 
 	dev_info(pd_data->dev, "%s\n", __func__);
 
-	/* TODO: Get present sink cap from device policy manager */
-	policy->tx_msg_header.msg_type = USBPD_Sink_Capabilities;
-	policy->tx_msg_header.port_data_role = USBPD_UFP;
-	policy->tx_msg_header.port_power_role = USBPD_SINK;
-	policy->tx_msg_header.num_data_objs = 1;
+#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	pd_noti.sink_status.selected_pdo_num = 0;
+#endif
+	policy->tx_msg_header.word = pd_data->sink_msg_header.word;
+	policy->tx_data_obj[0].object = pd_data->sink_data_obj[0].object;
+	policy->tx_data_obj[1].object = pd_data->sink_data_obj[1].object;
 
-	policy->tx_data_obj[0].power_data_obj_battery.max_power
-		= manager->sink_max_power;
-	policy->tx_data_obj[0].power_data_obj_battery.min_voltage
-		= manager->sink_min_volt;
-	policy->tx_data_obj[0].power_data_obj_battery.max_voltage
-		= manager->sink_max_volt;
-	policy->tx_data_obj[0].power_data_obj_battery.supply_type
-		= POWER_TYPE_BATTERY;
+	policy->sink_cap_received = 1;
 
 	if (usbpd_send_msg(pd_data, &policy->tx_msg_header,
 				policy->tx_data_obj))
@@ -737,6 +743,9 @@ policy_state usbpd_policy_drs_dfp_ufp_send_dr_swap(struct policy_data *policy)
 		pd_data->policy.state = PE_DRS_DFP_UFP_Send_DR_Swap;
 		msg = usbpd_wait_msg(pd_data, MSG_ACCEPT | MSG_REJECT
 				| MSG_WAIT, tSenderResponse);
+		if (policy->abnormal_state)
+			return PE_DRS_DFP_UFP_Send_DR_Swap;
+
 		if (msg & MSG_ACCEPT)
 			return PE_DRS_DFP_UFP_Change_to_UFP;
 	}
@@ -826,6 +835,9 @@ policy_state usbpd_policy_drs_ufp_dfp_send_dr_swap(struct policy_data *policy)
 		pd_data->policy.state = PE_DRS_UFP_DFP_Send_DR_Swap;
 		msg = usbpd_wait_msg(pd_data, MSG_ACCEPT | MSG_REJECT
 				| MSG_WAIT, tSenderResponse);
+		if (policy->abnormal_state)
+			return PE_DRS_UFP_DFP_Send_DR_Swap;
+
 		if (msg & MSG_ACCEPT)
 			return PE_DRS_UFP_DFP_Change_to_DFP;
 	}
@@ -894,6 +906,9 @@ policy_state usbpd_policy_prs_src_snk_send_swap(struct policy_data *policy)
 		pd_data->policy.state = PE_PRS_SRC_SNK_Send_Swap;
 		msg = usbpd_wait_msg(pd_data, MSG_ACCEPT | MSG_REJECT
 				| MSG_WAIT, tSenderResponse);
+		if (policy->abnormal_state)
+			return PE_PRS_SRC_SNK_Send_Swap;
+
 		if (msg & MSG_ACCEPT)
 			return PE_PRS_SRC_SNK_Transition_off;
 	}
@@ -915,7 +930,7 @@ policy_state usbpd_policy_prs_src_snk_transition_to_off(struct policy_data *poli
 {
 	struct usbpd_data *pd_data = policy_to_usbpd(policy);
 
-	usbpd_manager_turn_off_power_supply(pd_data);
+	pd_data->phy_ops.set_otg_control(pd_data, 0);
 
 	msleep(150);
 
@@ -944,8 +959,11 @@ policy_state usbpd_policy_prs_src_snk_wait_source_on(struct policy_data *policy)
 			pd_data->counter.swap_hard_reset_counter = 0;
 			dev_info(pd_data->dev, "got PSRDY.\n");
 			return PE_SNK_Startup;
-		} else
+		} else {
+			if (policy->abnormal_state)
+				return PE_PRS_SRC_SNK_Wait_Source_on;
 			goto hard_reset;
+		}
 	}
 	return PE_PRS_SRC_SNK_Wait_Source_on;
 
@@ -996,6 +1014,8 @@ policy_state usbpd_policy_prs_snk_src_send_swap(struct policy_data *policy)
 		pd_data->policy.state = PE_PRS_SNK_SRC_Send_Swap;
 		msg = usbpd_wait_msg(pd_data, MSG_ACCEPT | MSG_REJECT
 				| MSG_WAIT, tSenderResponse);
+		if (policy->abnormal_state)
+			return PE_PRS_SNK_SRC_Send_Swap;
 		if (msg & MSG_ACCEPT)
 			return PE_PRS_SNK_SRC_Transition_off;
 	}
@@ -1029,6 +1049,8 @@ policy_state usbpd_policy_prs_snk_src_transition_to_off(struct policy_data *poli
 		dev_info(pd_data->dev, "got PSRDY.\n");
 		return PE_PRS_SNK_SRC_Assert_Rp;
 	}
+	if (policy->abnormal_state)
+		return PE_PRS_SNK_SRC_Transition_off;
 
 	if (pd_data->counter.swap_hard_reset_counter > USBPD_nHardResetCount)
 		return Error_Recovery;
@@ -1053,7 +1075,7 @@ policy_state usbpd_policy_prs_snk_src_source_on(struct policy_data *policy)
 
 	dev_info(pd_data->dev, "%s\n", __func__);
 
-	usbpd_manager_turn_on_source(pd_data);
+	pd_data->phy_ops.set_otg_control(pd_data, 1);
 
 	msleep(150);
 
@@ -1133,6 +1155,8 @@ policy_state usbpd_policy_vcs_wait_for_vconn(struct policy_data *policy)
 		dev_info(pd_data->dev, "got PSRDY.\n");
 		return PE_VCS_Turn_Off_VCONN;
 	}
+	if (policy->abnormal_state)
+		return PE_VCS_Wait_for_VCONN;
 
 	if (pd_data->counter.swap_hard_reset_counter > USBPD_nHardResetCount)
 		return Error_Recovery;
@@ -1178,6 +1202,8 @@ policy_state usbpd_policy_vcs_send_ps_rdy(struct policy_data *policy)
 
 	pd_data->phy_ops.get_power_role(pd_data, &power_role);
 	pd_data->phy_ops.get_data_role(pd_data, &data_role);
+
+	mdelay(5);
 
 	if (usbpd_send_ctrl_msg(pd_data, &policy->tx_msg_header,
 				USBPD_PS_RDY, data_role, data_role)) {
@@ -2680,6 +2706,8 @@ void usbpd_init_policy(struct usbpd_data *pd_data)
 	policy->rx_msg_header.word = 0;
 	policy->tx_msg_header.word = 0;
 	policy->modal_operation = 0;
+	policy->sink_cap_received = 0;
+	policy->send_sink_cap = 0;
 	for (i = 0; i < USBPD_MAX_COUNT_MSG_OBJECT; i++) {
 		policy->rx_data_obj[i].object = 0;
 		policy->tx_data_obj[i].object = 0;

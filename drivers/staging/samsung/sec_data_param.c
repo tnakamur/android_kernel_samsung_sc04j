@@ -135,11 +135,11 @@ static ssize_t sec_hw_param_ap_info_show(struct kobject *kobj,
 
 	info_size += snprintf(buf, DATA_SIZE, "\"HW_REV\":\"%d\",", sec_hw_rev);
 	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"LOT_ID\":\"%s\",", lot_id);
-	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"ASV_CL0\":\"%d\",", asv_ids_information(cpu_asv));
+	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"ASV_LIT\":\"%d\",", asv_ids_information(cpu_asv));
 	//CPUCL0/1 use same ASV table
-	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"ASV_CL1\":\"%d\",", asv_ids_information(cpu_asv));
+	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"ASV_BIG\":\"%d\",", asv_ids_information(cpu_asv));
 	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"ASV_MIF\":\"%d\",", asv_ids_information(mif_asv));
-	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"IDS_CL1\":\"\",");
+	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"IDS_BIG\":\"\",");
 	info_size += snprintf((char*)(buf+info_size), DATA_SIZE - info_size, "\"PARAM0\":\"\"");
 	
 	return info_size;

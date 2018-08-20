@@ -146,6 +146,7 @@ static void s2mu004_analog_ivr_switch(
 #endif
 		(is_hv_wire_type(cable_type)) ||
 		(cable_type == POWER_SUPPLY_TYPE_PDIC) ||
+		(cable_type == POWER_SUPPLY_TYPE_UARTOFF) ||
 		(cable_type == POWER_SUPPLY_TYPE_HV_PREPARE_MAINS)) {
 			pr_info("[DEBUG]%s(%d): digital IVR \n", __func__, __LINE__);
 			enable = 0;
@@ -176,6 +177,11 @@ static void s2mu004_enable_charger_switch(
 {
 	if (factory_mode) {
 		pr_info("%s: Factory Mode Skip CHG_EN Control\n", __func__);
+		return;
+	}
+
+	if (charger->otg_on) {
+		pr_info("[DEBUG] %s: skipped set(%d) : OTG is on\n", __func__, onoff);
 		return;
 	}
 
@@ -231,24 +237,20 @@ static void s2mu004_enable_charger_switch(
 		/* async off */
 		s2mu004_update_reg(charger->i2c, 0x96, 0x00, 0x01 << 3);
 	} else {
-		if (!charger->otg_on) {
-			pr_info("[DEBUG] %s: turn off charger\n", __func__);
+		pr_info("[DEBUG] %s: turn off charger\n", __func__);
 
 #if !defined(CONFIG_SEC_FACTORY)
-			if (charger->dev_id < 0x3) {
-				/* Disable Analog IVR - Digital IVR enable*/
-				s2mu004_analog_ivr_switch(charger, DISABLE);
-			}
-#endif
-			mdelay(30);
-			s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL0, BUCK_MODE, REG_MODE_MASK);
-
-			/* async on */
-			s2mu004_update_reg(charger->i2c, 0x96, 0x01 << 3, 0x01 << 3);
-			mdelay(100);
-		} else {
-			pr_info("[DEBUG] %s: skipped turn off charger : OTG\n", __func__);
+		if (charger->dev_id < 0x3) {
+			/* Disable Analog IVR - Digital IVR enable*/
+			s2mu004_analog_ivr_switch(charger, DISABLE);
 		}
+#endif
+		mdelay(30);
+		s2mu004_update_reg(charger->i2c, S2MU004_CHG_CTRL0, BUCK_MODE, REG_MODE_MASK);
+
+		/* async on */
+		s2mu004_update_reg(charger->i2c, 0x96, 0x01 << 3, 0x01 << 3);
+		mdelay(100);
 	}
 }
 

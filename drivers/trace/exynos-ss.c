@@ -279,6 +279,12 @@ struct exynos_ss_log {
 		void *last_pc[ESS_ITERATION];
 	} core[ESS_NR_CPUS];
 #endif
+	struct i2c_clk_log {
+		unsigned long long time;
+		int bus_id;
+		int clk_enable;
+		int en;
+	} i2c_clk[ESS_LOG_MAX_NUM];
 };
 
 struct exynos_ss_log_idx {
@@ -322,6 +328,7 @@ struct exynos_ss_log_idx {
 	atomic_t printkl_log_idx;
 	atomic_t printk_log_idx;
 #endif
+	atomic_t i2c_clk_log_idx;
 };
 #ifdef CONFIG_ARM64
 struct exynos_ss_mmu_reg {
@@ -399,7 +406,7 @@ extern int s3c2410wdt_set_emergency_stop(void);
 extern int s3c2410wdt_set_emergency_reset(unsigned int timeout);
 extern int s3c2410wdt_keepalive_emergency(void);
 #else
-#define s3c2410wdt_set_emergency_stop()	(-1)
+#define s3c2410wdt_set_emergency_stop() 	(-1)
 #define s3c2410wdt_set_emergency_reset(a)	do { } while(0)
 #define s3c2410wdt_keepalive_emergency()	do { } while(0)
 #endif
@@ -455,9 +462,6 @@ static struct exynos_ss_item ess_items[] = {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_SFRDUMP
 	{"log_sfr",	{SZ_4M,		0, 0, false, true, true}, NULL ,NULL, 0},
 #endif
-#ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
-	{"log_pstore",	{SZ_2M,		0, 0, true, true, true}, NULL ,NULL, 0},
-#endif
 #ifdef CONFIG_EXYNOS_CORESIGHT_ETR
 	{"log_etm",	{SZ_8M,		0, 0, true, true, true}, NULL ,NULL, 0},
 #endif
@@ -467,10 +471,11 @@ static struct exynos_ss_item ess_items[] = {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
 	{"log_platform",{SZ_2M,		0, 0, false, true, true}, NULL ,NULL, 0},
 #endif
+#endif
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
-	{"log_pstore",	{SZ_2M,		0, 0, true, true, true}, NULL ,NULL, 0},
+	{"log_pstore",	{SZ_32K,	0, 0, true, true, true}, NULL ,NULL, 0},
 #endif
-#endif
+
 };
 
 /*
@@ -616,13 +621,13 @@ static void exynos_ss_save_mmu(struct exynos_ss_mmu_reg *mmu_reg)
 static void exynos_ss_core_power_stat(unsigned int val, unsigned cpu)
 {
 	if (exynos_ss_get_enable("log_kevents", true))
-	__raw_writel(val, (S5P_VA_SS_CORE_POWER_STAT + cpu * 4));
+		__raw_writel(val, (S5P_VA_SS_CORE_POWER_STAT + cpu * 4));
 }
 
 static unsigned int exynos_ss_get_core_panic_stat(unsigned cpu)
 {
 	if (exynos_ss_get_enable("log_kevents", true))
-	return __raw_readl(S5P_VA_SS_CORE_PANIC_STAT + cpu * 4);
+		return __raw_readl(S5P_VA_SS_CORE_PANIC_STAT + cpu * 4);
 	else
 		return 0;
 }
@@ -630,19 +635,19 @@ static unsigned int exynos_ss_get_core_panic_stat(unsigned cpu)
 static void exynos_ss_set_core_panic_stat(unsigned int val, unsigned cpu)
 {
 	if (exynos_ss_get_enable("log_kevents", true))
-	__raw_writel(val, (S5P_VA_SS_CORE_PANIC_STAT + cpu * 4));
+		__raw_writel(val, (S5P_VA_SS_CORE_PANIC_STAT + cpu * 4));
 }
 
 static void exynos_ss_scratch_reg(unsigned int val)
 {
 	if (exynos_ss_get_enable("log_kevents", true) || ess_desc.need_header)
-	__raw_writel(val, S5P_VA_SS_SCRATCH);
+		__raw_writel(val, S5P_VA_SS_SCRATCH);
 }
 
 static void exynos_ss_report_reason(unsigned int val)
 {
 	if (exynos_ss_get_enable("log_kevents", true))
-	__raw_writel(val, S5P_VA_SS_EMERGENCY_REASON);
+		__raw_writel(val, S5P_VA_SS_EMERGENCY_REASON);
 }
 
 unsigned int exynos_ss_get_item_size(char* name)
@@ -722,18 +727,18 @@ int exynos_ss_post_panic(void)
 {
 	if (ess_base.enabled) {
 		exynos_ss_dump_sfr();
-	exynos_ss_save_context(NULL);
-	flush_cache_all();
+		exynos_ss_save_context(NULL);
+		flush_cache_all();
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PANIC_REBOOT
-	if (!ess_desc.no_wdt_dev) {
+		if (!ess_desc.no_wdt_dev) {
 #ifdef CONFIG_EXYNOS_SNAPSHOT_WATCHDOG_RESET
-		if (ess_desc.hardlockup || num_online_cpus() > 1) {
+			if (ess_desc.hardlockup || num_online_cpus() > 1) {
 			/* for stall cpu */
-			while(1)
+				while(1)
 				wfi();
-		}
+			}
 #endif
-	}
+		}
 #endif
 	}
 #ifdef CONFIG_SEC_DEBUG
@@ -778,6 +783,11 @@ int exynos_ss_post_reboot(void)
 	/* clear ESS_SIGN_PANIC when normal reboot */
 	for (cpu = 0; cpu < ESS_NR_CPUS; cpu++)
 		exynos_ss_set_core_panic_stat(ESS_SIGN_RESET, cpu);
+
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_reboot_handler();
+	flush_cache_all();
+#endif
 
 	return 0;
 }
@@ -998,7 +1008,7 @@ int exynos_ss_get_enable(const char *name, bool init)
 				if (init)
 					ret = item->entry.enabled_init;
 				else
-				ret = item->entry.enabled;
+					ret = item->entry.enabled;
 				break;
 			}
 		}
@@ -1340,6 +1350,9 @@ extern void check_crash_keys_in_user(unsigned int code, int onoff);
 #endif
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_CRASH_KEY
+#ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
+struct tsp_dump_callbacks dump_callbacks;
+#endif
 void exynos_ss_check_crash_key(unsigned int code, int value)
 {
 	static bool volup_p;
@@ -1355,7 +1368,7 @@ void exynos_ss_check_crash_key(unsigned int code, int value)
 #ifdef CONFIG_SEC_UPLOAD
 		check_crash_keys_in_user(code, value);
 #endif
-			return;
+		return;
 	}	
 #endif
 
@@ -1424,7 +1437,7 @@ static int exynos_ss_panic_handler(struct notifier_block *nb,
 	exynos_ss_dump_task_info();
 #ifdef CONFIG_EXYNOS_CORESIGHT_PC_INFO
 	if (exynos_ss_get_enable("log_kevents", true))
-	memcpy(ess_log->core, exynos_cs_pc, sizeof(ess_log->core));
+		memcpy(ess_log->core, exynos_cs_pc, sizeof(ess_log->core));
 #endif
 	flush_cache_all();
 #else
@@ -1488,10 +1501,10 @@ static size_t __init exynos_ss_remap(unsigned int base, unsigned int size)
 			ess_items[i].entry.vaddr = pre_vaddr;
 			ess_items[i].entry.paddr = pre_paddr;
 
-		ess_items[i].head_ptr = (unsigned char *)ess_items[i].entry.vaddr;
-		ess_items[i].curr_ptr = (unsigned char *)ess_items[i].entry.vaddr;
+			ess_items[i].head_ptr = (unsigned char *)ess_items[i].entry.vaddr;
+			ess_items[i].curr_ptr = (unsigned char *)ess_items[i].entry.vaddr;
 
-		/* fill to ess_iodesc for mapping */
+			/* fill to ess_iodesc for mapping */
 			ess_iodesc.type = MT_NORMAL_NC;
 			ess_iodesc.length = item_size;
 			ess_iodesc.virtual = ess_items[i].entry.vaddr;
@@ -1506,7 +1519,7 @@ static size_t __init exynos_ss_remap(unsigned int base, unsigned int size)
 		}
 	}
 	return (size_t)(enabled_count ? S5P_VA_SS_BASE : 0);
-	}
+}
 
 static int __init exynos_ss_init_desc(void)
 {
@@ -1633,11 +1646,11 @@ static int __init exynos_ss_output(void)
 	pr_info("exynos-snapshot physical / virtual memory layout:\n");
 	for (i = 0; i < ARRAY_SIZE(ess_items); i++)
 		if (ess_items[i].entry.enabled_init)
-		pr_info("%-12s: phys:0x%zx / virt:0x%zx / size:0x%zx\n",
-			ess_items[i].name,
-			ess_items[i].entry.paddr,
-			ess_items[i].entry.vaddr,
-			ess_items[i].entry.size);
+			pr_info("%-12s: phys:0x%zx / virt:0x%zx / size:0x%zx\n",
+				ess_items[i].name,
+				ess_items[i].entry.paddr,
+				ess_items[i].entry.vaddr,
+				ess_items[i].entry.size);
 
 	return 0;
 }
@@ -1727,6 +1740,7 @@ static void __init exynos_ss_fixmap_header(void)
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HRTIMER
 		atomic_set(&(ess_idx.hrtimer_log_idx[i]), -1);
 #endif
+		atomic_set(&(ess_idx.i2c_clk_log_idx), -1);
 	}
 	/*  initialize kernel event to 0 except only header */
 	memset((size_t *)(vaddr + ESS_KEEP_HEADER_SZ), 0, size - ESS_KEEP_HEADER_SZ);
@@ -2241,6 +2255,27 @@ void exynos_ss_freq(int type, unsigned long old_freq, unsigned long target_freq,
 	}
 }
 #endif
+
+void exynos_ss_i2c_clk(struct clk *clk, int bus_id, int en)
+{
+	struct exynos_ss_item *item = &ess_items[ess_desc.kevents_num];
+
+	if (bus_id != 0)
+		return;
+
+	if (unlikely(!ess_base.enabled || !item->entry.enabled || !item->entry.enabled_init))
+		return;
+	{
+		int cpu = raw_smp_processor_id();
+		unsigned long i = atomic_inc_return(&ess_idx.i2c_clk_log_idx) &
+				(ARRAY_SIZE(ess_log->i2c_clk) - 1);
+
+		ess_log->i2c_clk[i].time = cpu_clock(cpu);
+		ess_log->i2c_clk[i].bus_id = bus_id;
+		ess_log->i2c_clk[i].clk_enable = clk->enable_count;
+		ess_log->i2c_clk[i].en = en;
+	}
+}
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_HRTIMER
 void exynos_ss_hrtimer(void *timer, s64 *now, void *fn, int en)
@@ -3048,10 +3083,8 @@ EXPORT_SYMBOL(exynos_ss_hook_pmsg);
 
 #ifdef CONFIG_EXYNOS_SNAPSHOT_PSTORE
 static struct ramoops_platform_data ess_ramoops_data = {
-	.record_size	= SZ_512K,
-	.console_size	= SZ_512K,
-	.ftrace_size	= SZ_512K,
-	.pmsg_size	= SZ_512K,
+	.record_size	= SZ_4K,
+	.pmsg_size	= SZ_4K,
 	.dump_oops	= 1,
 };
 
@@ -3065,8 +3098,10 @@ static struct platform_device ess_ramoops = {
 static int __init ess_pstore_init(void)
 {
 	if (exynos_ss_get_enable("log_pstore", true)) {
-	ess_ramoops_data.mem_size = exynos_ss_get_item_size("log_pstore");
-	ess_ramoops_data.mem_address = exynos_ss_get_item_paddr("log_pstore");
+		ess_ramoops_data.mem_size = exynos_ss_get_item_size("log_pstore");
+		ess_ramoops_data.mem_address = exynos_ss_get_item_paddr("log_pstore");
+		ess_ramoops_data.pmsg_size = ess_ramoops_data.mem_size / 2;
+		ess_ramoops_data.record_size = ess_ramoops_data.mem_size / 2;
 	}
 	return platform_device_register(&ess_ramoops);
 }

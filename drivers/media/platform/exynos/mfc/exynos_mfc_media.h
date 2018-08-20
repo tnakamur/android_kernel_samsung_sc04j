@@ -121,7 +121,8 @@ enum v4l2_mpeg_mfc51_video_frame_type {
 #define V4L2_MPEG_VIDEO_HEADER_MODE_AT_THE_READY	2
 
 /* new entry for enum v4l2_mpeg_video_multi_slice_mode */
-#define V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB_ROW	3
+#define V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_MB_ROW		3
+#define V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_MAX_FIXED_BYTES	4
 
 /* new entry for enum v4l2_mpeg_video_h264_profile */
 #define V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH	17
@@ -406,6 +407,8 @@ enum v4l2_mpeg_video_hevc_hierarchical_coding_type {
 					(V4L2_CID_MPEG_MFC_BASE + 190)
 #define V4L2_CID_MPEG_VIDEO_ROI_ENABLE				\
 					(V4L2_CID_MPEG_MFC_BASE + 191)
+#define V4L2_CID_MPEG_VIDEO_BLACK_BAR_DETECT			\
+					(V4L2_CID_MPEG_MFC_BASE + 194)
 
 /* QP BOUND interface */
 #define V4L2_CID_MPEG_VIDEO_H264_MAX_QP_P			\
