@@ -175,52 +175,6 @@ ERROR:
 }
 
 /**
-* Command : Erase Page
-*/
-static int mip_isc_erase_page(struct mip4_tk_info *info, int offset)
-{
-	u8 write_buf[8] = ISC_CMD_ERASE_PAGE;
-	struct i2c_msg msg[1];
-
-	msg[0].addr = info->client->addr;
-	msg[0].flags = 0;
-	msg[0].buf = write_buf;
-	if (info->ic_id == 0x0F)
-		msg[0].len = 6;
-	else
-		msg[0].len = 8;
-
-	input_dbg(true, &info->client->dev, "%s [START]\n", __func__);
-
-	if (info->ic_id == 0x0F){
-		write_buf[4] = (u8)(((offset)>>8)&0xFF );
-		write_buf[5] = (u8)(((offset)>>0)&0xFF );
-	} else {
-		write_buf[4] = (u8)((offset >> 24) & 0xFF);
-		write_buf[5] = (u8)((offset >> 16) & 0xFF);
-		write_buf[6] = (u8)((offset >> 8) & 0xFF);
-		write_buf[7] = (u8)(offset & 0xFF);
-	}
-	
-	if (i2c_transfer(info->client->adapter, msg, ARRAY_SIZE(msg)) != ARRAY_SIZE(msg)) {
-		input_err(true, &info->client->dev, "%s [ERROR] i2c_transfer\n", __func__);
-		goto ERROR;
-	}
-
-	if (mip_isc_read_status(info, info->ic_id) != 0) {
-		goto ERROR;
-	}
-
-	input_dbg(true, &info->client->dev, "%s [DONE] - Offset [0x%04X]\n", __func__, offset);
-
-	return 0;
-
-ERROR:
-	input_err(true, &info->client->dev, "%s [ERROR]\n", __func__);
-	return -1;
-}
-
-/**
 * Command : Read Page
 */
 static int __maybe_unused mip_isc_read_page(struct mip4_tk_info *info, int offset, u8 *data, int length)
@@ -321,57 +275,6 @@ ERROR:
 	return -1;
 }
 
-/**
-* Command : Program Page
-*/
-static int mip_isc_program_page(struct mip4_tk_info *info, int offset, const u8 *data, int length)
-{
-	u8 write_buf[8 + ISC_PAGE_SIZE] = ISC_CMD_PROGRAM_PAGE;
-
-	input_dbg(true, &info->client->dev, "%s [START]\n", __func__);
-
-	if (length > ISC_PAGE_SIZE) {
-		input_err(true, &info->client->dev, "%s [ERROR] page length overflow\n", __func__);
-		goto ERROR;
-	}
-
-	if (info->ic_id == 0x0F){
-		write_buf[4] = (u8)((offset >> 8) & 0xFF);
-		write_buf[5] = (u8)(offset & 0xFF);
-		
-		memcpy(&write_buf[6], data, length);
-	}else{
-		write_buf[4] = (u8)((offset >> 24) & 0xFF);
-		write_buf[5] = (u8)((offset >> 16) & 0xFF);
-		write_buf[6] = (u8)((offset >> 8) & 0xFF);
-		write_buf[7] = (u8)(offset & 0xFF);
-		
-		memcpy(&write_buf[8], data, length);
-	}	
-
-	if (info->ic_id == 0x0F){
-		if (i2c_master_send(info->client, write_buf, (length + 6)) != (length + 6)) {
-			input_err(true, &info->client->dev, "%s [ERROR] i2c_master_send\n", __func__);
-			goto ERROR;
-		}
-	}else{
-		if (i2c_master_send(info->client, write_buf, (length + 8)) != (length + 8)) {
-			input_err(true, &info->client->dev, "%s [ERROR] i2c_master_send\n", __func__);
-			goto ERROR;
-		}
-	}
-
-	if (mip_isc_read_status(info, info->ic_id) != 0) {
-		goto ERROR;
-	}
-
-	input_dbg(true, &info->client->dev, "%s [DONE] - Offset[0x%04X] Length[%d]\n", __func__, offset, length);
-	return 0;
-
-ERROR:
-	input_err(true, &info->client->dev, "%s [ERROR]\n", __func__);
-	return -1;
-}
 
 /*
 * Command : Enter ISC
@@ -499,8 +402,6 @@ int mip4_tk_flash_fw(struct mip4_tk_info *info, const u8 *fw_data, size_t fw_siz
 	u16 tail_size = 0;
 	u8 tail_mark[4] = MIP_BIN_TAIL_MARK;
 	u16 ver_chip[MIP_FW_MAX_SECT_NUM];
-	bool full_download = false;
-	int i;
 
 	//Check tail size
 	tail_size = (fw_data[fw_size - 5] << 8) | fw_data[fw_size - 6];
@@ -584,81 +485,18 @@ int mip4_tk_flash_fw(struct mip4_tk_info *info, const u8 *fw_data, size_t fw_siz
 			}
 
 			//Compare version
-			if (section == false) {
-				//Full download
-				if ((ver_chip[0] == bin_info->ver_boot) && (ver_chip[1] == bin_info->ver_core) && (ver_chip[2] == bin_info->ver_app) && (ver_chip[3] == bin_info->ver_param)) {
-					input_info(true, &client->dev, "%s - Chip firmware is already up-to-date\n", __func__);
-					ret = fw_err_uptodate;
-					goto UPTODATE;
-				} else {
-					offset_start = 0;
-				}
+			if ((ver_chip[0] == bin_info->ver_boot) && (ver_chip[1] == bin_info->ver_core) && (ver_chip[2] >= bin_info->ver_app) && (ver_chip[3] >= bin_info->ver_param)) {
+				input_info(true, &client->dev, "%s - Chip firmware is already up-to-date\n", __func__);
+				ret = fw_err_uptodate;
+				goto UPTODATE;
 			} else {
-				//Section download
-				if (ver_chip[0] != bin_info->ver_boot) {
-					if ((bin_info->boot_end - bin_info->boot_start) > 0) {
-						offset_start = bin_info->boot_start * 1024;
-					} else if ((bin_info->core_end - bin_info->core_start) > 0) {
-						offset_start = bin_info->core_start * 1024;
-					} else if ((bin_info->app_end - bin_info->app_start) > 0) {
-						offset_start = bin_info->app_start * 1024;
-					} else if ((bin_info->param_end - bin_info->param_start) > 0) {
-						offset_start = bin_info->param_start * 1024;
-					} else {
-						input_err(true, &client->dev, "%s [ERROR] wrong offset\n", __func__);
-						ret = fw_err_file_type;
-						goto ERROR_FILE;
-					}
-				} else if (ver_chip[1] != bin_info->ver_core) {
-					if((bin_info->core_end - bin_info->core_start) > 0) {
-						offset_start = bin_info->core_start * 1024;
-					} else if((bin_info->app_end - bin_info->app_start) > 0) {
-						offset_start = bin_info->app_start * 1024;
-					} else if((bin_info->param_end - bin_info->param_start) > 0) {
-						offset_start = bin_info->param_start * 1024;
-					} else {
-						input_err(true, &client->dev, "%s [ERROR] wrong offset\n", __func__);
-						ret = fw_err_file_type;
-						goto ERROR_FILE;
-					}
-				} else if (ver_chip[2] < bin_info->ver_app) {
-					if ((bin_info->app_end - bin_info->app_start) > 0) {
-						offset_start = bin_info->app_start * 1024;
-					} else if ((bin_info->param_end - bin_info->param_start) > 0) {
-						offset_start = bin_info->param_start * 1024;
-					} else {
-						input_err(true, &client->dev, "%s [ERROR] wrong offset\n", __func__);
-						ret = fw_err_file_type;
-						goto ERROR_FILE;
-					}
-				} else if (ver_chip[3] < bin_info->ver_param) {
-					if ((bin_info->param_end - bin_info->param_start) > 0) {
-						offset_start = bin_info->param_start * 1024;
-					} else {
-						input_err(true, &client->dev, "%s [ERROR] wrong offset\n", __func__);
-						ret = fw_err_file_type;
-						goto ERROR_FILE;
-					}
-				} else {
-					input_info(true, &client->dev, "%s - Chip firmware is already up-to-date\n", __func__);
-					ret = fw_err_uptodate;
-					goto UPTODATE;
-				}
+				offset_start = 0;
 			}
 		}
 	}
 
 	input_info(true, &client->dev, "%s - Start offset[0x%04X]\n", 
 			__func__, offset_start);
-
-	if (offset_start == 0) {
-		full_download = true;
-		input_dbg(true, &client->dev, "%s - Full download\n", __func__);
-	} else {
-		full_download = false;
-		input_dbg(true, &client->dev, "%s - Section download\n", __func__);
-	}
-	full_download = false;
 
 	//Read bin data
 	bin_size = bin_info->bin_length;
@@ -677,90 +515,44 @@ int mip4_tk_flash_fw(struct mip4_tk_info *info, const u8 *fw_data, size_t fw_siz
 	}
 
 	//Erase
-	if (full_download == true) {
-		//Erase all pages
-		input_info(true, &client->dev, "%s - Erase all pages\n", __func__);
-		ret = mip_isc_erase_mass(info);
-		if (ret != 0) {
-			input_err(true, &client->dev,
-				"%s [ERROR] mip_isc_erase_mass\n", __func__);
-			ret = fw_err_download;
-			goto ERROR_UPDATE;
-		}
-	} else {
-		//Erase first page
-		input_info(true, &client->dev, "%s - Erase first page : Offset[0x%04X]\n", 
-				__func__, offset_start);
-		ret = mip_isc_erase_page(info, offset_start);
-		if (ret != 0) {
-			input_err(true, &client->dev,"%s [ERROR] mip_isc_erase_page\n", __func__);
-			ret = fw_err_download;
-			goto ERROR_UPDATE;
-		}
+	input_info(true, &client->dev, "%s - Erase all pages\n", __func__);
+	ret = mip_isc_erase_mass(info);
+	if (ret != 0) {
+		input_err(true, &client->dev,
+			"%s [ERROR] mip_isc_erase_mass\n", __func__);
+		ret = fw_err_download;
+		goto ERROR_UPDATE;
 	}
 
 	//Download
 	input_info(true, &client->dev, "%s - Program & Verify\n", __func__);
 	offset = bin_size - ISC_PAGE_SIZE;
 	while (offset >= offset_start) {
-		if (full_download == true) {
-			//Write page
-			if (mip_isc_write_page(info, offset, &bin_data[offset], ISC_PAGE_SIZE)) {
-				input_err(true, &client->dev, "%s [ERROR] mip_isc_write_page : offset[0x%04X]\n", __func__, offset);
-				ret = fw_err_download;
-				goto ERROR_UPDATE;
-			}
-			input_dbg(false, &client->dev, "%s - mip_isc_write_page : offset[0x%04X]\n", __func__, offset);
-		} else {
-			//Program page
-			if (mip_isc_program_page(info, offset, &bin_data[offset], ISC_PAGE_SIZE)) {
-				input_err(true, &client->dev, "%s [ERROR] mip_isc_program__page : offset[0x%04X]\n", __func__, offset);
-				ret = fw_err_download;
-				goto ERROR_UPDATE;
-			}
-			input_dbg(false, &client->dev, "%s - mip_isc_program_page : offset[0x%04X]\n", __func__, offset);
+		//Write page
+		if (mip_isc_write_page(info, offset, &bin_data[offset], ISC_PAGE_SIZE)) {
+			input_err(true, &client->dev, "%s [ERROR] mip_isc_write_page : offset[0x%04X]\n", __func__, offset);
+			ret = fw_err_download;
+			goto ERROR_UPDATE;
 		}
 		input_dbg(false, &client->dev, "%s - mip_isc_write_page : offset[0x%04X]\n", __func__, offset);
 
 		//Verify page
-		if (info->ic_id == 0x1C) {
-			if (mip_isc_read_page(info, offset, rbuf, ISC_PAGE_SIZE)) {
-				input_err(true, &client->dev, "%s [ERROR] isc_read_page : offset[0x%04X]\n", __func__, offset);
-				ret = fw_err_download;
-				goto ERROR_UPDATE;
-			}
-			input_dbg(true, &client->dev, "%s - isc_read_page : offset[0x%04X]\n", __func__, offset);
-			
+		if (mip_isc_read_page(info, offset, rbuf, ISC_PAGE_SIZE)) {
+			input_err(true, &client->dev, "%s [ERROR] isc_read_page : offset[0x%04X]\n", __func__, offset);
+			ret = fw_err_download;
+			goto ERROR_UPDATE;
+		}
+		input_dbg(true, &client->dev, "%s - isc_read_page : offset[0x%04X]\n", __func__, offset);
+		
 #if MIP_FW_UPDATE_DEBUG
-			print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W File : ", DUMP_PREFIX_OFFSET, 16, 1, &bin_data[offset], ISC_PAGE_SIZE, false);
-			print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W Chip : ", DUMP_PREFIX_OFFSET, 16, 1, rbuf, ISC_PAGE_SIZE, false);
+		print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W File : ", DUMP_PREFIX_OFFSET, 16, 1, &bin_data[offset], ISC_PAGE_SIZE, false);
+		print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W Chip : ", DUMP_PREFIX_OFFSET, 16, 1, rbuf, ISC_PAGE_SIZE, false);
 #endif
-			
-			if (memcmp(rbuf, &bin_data[offset], ISC_PAGE_SIZE)) {
-				input_err(true, &client->dev, "%s [ERROR] Verify failed : offset[0x%04X]\n", __func__, offset);
-				ret = fw_err_download;
-				goto ERROR_UPDATE;
-			}
-		}else if(info->ic_id == 0x0F){
-			for (i = 0; i < ISC_PAGE_SIZE; i += 4) {
-				if (mip_isc_read_page(info, offset + i, rbuf, 4)) {
-					input_err(true, &client->dev, "%s [ERROR] mip_isc_read_page : offset[0x%04X] length[%d]\n", __func__, offset + i, 4);
-					ret = fw_err_download;
-					goto ERROR_UPDATE;
-				}
-				input_dbg(false, &client->dev, "%s - mip_isc_read_page : offset[0x%04X] length[%d]\n", __func__, offset + i, 4);
-
-#if MIP_FW_UPDATE_DEBUG
-				print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W File : ", DUMP_PREFIX_OFFSET, 16, 1, &bin_data[offset + i], 4, false);
-				print_hex_dump(KERN_ERR, MIP_DEV_NAME " F/W Chip : ", DUMP_PREFIX_OFFSET, 16, 1, rbuf, 4, false);
-#endif
-
-				if (memcmp(rbuf, &bin_data[offset + i], 4)) {
-					input_err(true, &client->dev, "%s [ERROR] Verify failed : offset[0x%04X]\n", __func__, offset + i);
-					ret = fw_err_download;
-					goto ERROR_UPDATE;
-				}
-			}
+		
+		if (memcmp(rbuf, &bin_data[offset], ISC_PAGE_SIZE)) {
+			input_err(true, &client->dev, "%s [ERROR] Verify failed : offset[0x%04X]\n", __func__, offset);
+			ret = fw_err_download;
+			goto ERROR_UPDATE;
 		}
 
 		//Next offset
@@ -768,6 +560,7 @@ int mip4_tk_flash_fw(struct mip4_tk_info *info, const u8 *fw_data, size_t fw_siz
 	}
 
 	//Exit ISC mode
+	input_dbg(false, &client->dev, "%s - Exit ISC mode\n", __func__);
 	mip_isc_exit(info);
 
 	//Reset chip

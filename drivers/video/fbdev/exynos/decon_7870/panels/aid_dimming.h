@@ -19,6 +19,8 @@
 #include "ea8061s_dimming.h"
 #elif defined(CONFIG_PANEL_S6E8AA5X01)
 #include "s6e8aa5x01_dimming.h"
+#elif defined(CONFIG_PANEL_EA8061S_J7VE)
+#include "ea8061s_dimming.h"
 #else
 #error "ERROR !! Check LCD Panel Header File"
 #endif

@@ -705,7 +705,7 @@ static int audmixer_hw_params(struct snd_pcm_substream *substream,
 {
 	enum audmixer_if_t interface = (enum audmixer_if_t)(dai->id);
 	int dl_bit;
-	unsigned int hq_mode;
+	unsigned int hq_mode = 0;
 	unsigned int sys_clk_freq;
 	unsigned int aifrate;
 	int ret;
@@ -769,9 +769,6 @@ static int audmixer_hw_params(struct snd_pcm_substream *substream,
 				__func__, sys_clk_freq);
 			return ret;
 		}
-		/* Change the clock only when switching the sample rate */
-		if (g_audmixer->aifrate == aifrate)
-			break;
 
 		regmap_update_bits(g_audmixer->regmap, AUDMIXER_REG_0A_HQ_CTL,
 				HQ_CTL_HQ_EN_MASK, hq_mode);
@@ -829,6 +826,8 @@ static int audmixer_hw_params(struct snd_pcm_substream *substream,
 						__func__, aifrate);
 				break;
 			}
+			regmap_update_bits(g_audmixer->regmap, AUDMIXER_REG_0A_HQ_CTL,
+				HQ_CTL_HQ_EN_MASK, hq_mode);
 			sys_clk_freq = AUDMIXER_SYS_CLK_FREQ_48KHZ;
 			ret = clk_set_rate(g_audmixer->clk_dout, sys_clk_freq);
 			if (ret != 0) {
@@ -839,7 +838,6 @@ static int audmixer_hw_params(struct snd_pcm_substream *substream,
 			}
 			break;
 		}
-
 		break;
 
 	case AUDMIXER_IF_AP1:
@@ -870,6 +868,7 @@ static int audmixer_hw_params(struct snd_pcm_substream *substream,
 
 	return 0;
 }
+
 
 /*
  * audmixer_startup: Start a particular interface of Audio Mixer

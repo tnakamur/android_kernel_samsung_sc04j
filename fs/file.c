@@ -514,16 +514,6 @@ repeat:
 
 out:
 	spin_unlock(&files->file_lock);
-
-#ifdef CONFIG_PANEL_S6E3FA3_J7Y17
-	/* debugging code for SF lockup issue. These will be removed. */
-	if (error == 1 && (current->group_leader != NULL) && 
-		!strncmp(current->group_leader->comm, "surfaceflinger", 14)) {
-		WARN_ON(1);
-		printk(KERN_ERR " alloc_fd: try to alloc 1\n");
-		panic("tried to alloc fd=1");
-	}
-#endif
 	return error;
 }
 
@@ -541,17 +531,6 @@ EXPORT_SYMBOL(get_unused_fd_flags);
 static void __put_unused_fd(struct files_struct *files, unsigned int fd)
 {
 	struct fdtable *fdt = files_fdtable(files);
-
-#ifdef CONFIG_PANEL_S6E3FA3_J7Y17
-	/* debugging code for SF lockup issue. These will be removed. */
-	if (fd == 1) {
-		if ((current->group_leader != NULL) && !strncmp(current->group_leader->comm, "surfaceflinger", 14))
-		{
-			WARN_ON(1);
-			panic("close fd: tried to close a fd=1");
-		}
-	}
-#endif
 	__clear_open_fd(fd, fdt);
 	if (fd < files->next_fd)
 		files->next_fd = fd;

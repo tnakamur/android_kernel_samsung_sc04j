@@ -114,7 +114,7 @@ device_initcall(sec_debug_user_fault_init);
 * 0x400~0x7FF: panic Extra Info (1KB)
 * 0x800~0xFFB: panic dumper log (2KB - 4B)
 *       0xFFC: copy of magic    (4B)
- */
+*/
 
 enum sec_debug_upload_magic_t {
 	UPLOAD_MAGIC_INIT		= 0x0,
@@ -138,11 +138,11 @@ enum sec_debug_upload_cause_t {
 static void sec_debug_set_upload_magic(unsigned magic, char *str)
 {
 	*(unsigned int *)SEC_DEBUG_MAGIC_VA = magic;
-	*(unsigned int *)(SEC_DEBUG_MAGIC_VA + SZ_4K -4) = magic;
+	*(unsigned int *)(SEC_DEBUG_MAGIC_VA + SZ_4K - 4) = magic;
 
 	if (str) {
 		strncpy((char *)SEC_DEBUG_MAGIC_VA + 4, str, SZ_1K - 4);
-	       
+
 #ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
 		sec_debug_set_extra_info_panic(str);
 		sec_debug_finish_extra_info();
@@ -194,7 +194,7 @@ int __init sec_debug_setup(void)
 		sec_debug_set_upload_magic(UPLOAD_MAGIC_PANIC, NULL);
 	} else {
 		goto out;
-}
+	}
 
 	kmsg_dump_register(&sec_dumper);
 
@@ -280,14 +280,14 @@ static void sec_debug_dump_cpu_stat(void)
 	u64 sum = 0;
 	u64 sum_softirq = 0;
 	unsigned int per_softirq_sums[NR_SOFTIRQS] = {0};
-	
+
 	char *softirq_to_name[NR_SOFTIRQS] = { "HI", "TIMER", "NET_TX", "NET_RX", "BLOCK", "BLOCK_IOPOLL", "TASKLET", "SCHED", "HRTIMER", "RCU" };
 
 	for_each_possible_cpu(i) {
 		user	+= kcpustat_cpu(i).cpustat[CPUTIME_USER];
 		nice	+= kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		system	+= kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
-		idle	+= get_idle_time(i); 
+		idle	+= get_idle_time(i);
 		iowait	+= get_iowait_time(i);
 		irq	+= kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
 		softirq	+= kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
@@ -422,14 +422,15 @@ void sec_debug_post_panic_handler(void)
 }
 
 #ifdef CONFIG_SEC_DEBUG_FILE_LEAK
-void sec_debug_print_file_list(void)
+int sec_debug_print_file_list(void)
 {
-	int i=0;
+	int i = 0;
 	unsigned int count = 0;
-	struct file *file=NULL;
+	struct file *file = NULL;
 	struct files_struct *files = current->files;
 	const char *p_rootname = NULL;
 	const char *p_filename = NULL;
+	int ret=0;
 
 	count = files->fdt->max_fds;
 
@@ -453,25 +454,30 @@ void sec_debug_print_file_list(void)
 
 			pr_err("[%04d]%s%s\n", i, p_rootname ? p_rootname : "null",
 			       p_filename ? p_filename : "null");
+			ret++;
 		}
 		rcu_read_unlock();
 	}
+	if(ret > count - 50)
+		return 1;
+	else
+		return 0;
 }
 
 void sec_debug_EMFILE_error_proc(unsigned long files_addr)
 {
-	if (files_addr!=(unsigned long)(current->files)) {
+	if (files_addr != (unsigned long)(current->files)) {
 		pr_err("Too many open files Error at %pS\n"
-						"%s(%d) thread of %s process tried fd allocation by proxy.\n"
-						"files_addr = 0x%lx, current->files=0x%p\n",
-					__builtin_return_address(0),
-					current->comm,current->tgid,current->group_leader->comm,
-					files_addr, current->files);
+		       "%s(%d) thread of %s process tried fd allocation by proxy.\n"
+		       "files_addr = 0x%lx, current->files=0x%p\n",
+		       __builtin_return_address(0),
+		       current->comm, current->tgid, current->group_leader->comm,
+		       files_addr, current->files);
 		return;
 	}
 
 	pr_err("Too many open files(%d:%s) at %pS\n",
-		current->tgid, current->group_leader->comm,__builtin_return_address(0));
+	       current->tgid, current->group_leader->comm, __builtin_return_address(0));
 
 	if (!sec_debug_level.en.kernel_fault)
 		return;
@@ -480,8 +486,9 @@ void sec_debug_EMFILE_error_proc(unsigned long files_addr)
 	if (!strcmp(current->group_leader->comm, "system_server") ||
 	    !strcmp(current->group_leader->comm, "mediaserver") ||
 	    !strcmp(current->group_leader->comm, "surfaceflinger")) {
-		sec_debug_print_file_list();
-		panic("Too many open files");
+		if (sec_debug_print_file_list() == 1) {
+			panic("Too many open files");
+		}
 	}
 }
 #endif /* CONFIG_SEC_DEBUG_FILE_LEAK */

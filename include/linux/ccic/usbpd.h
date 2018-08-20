@@ -1,3 +1,7 @@
+#if defined(CONFIG_IFPMIC_SUPPORT)
+#include <linux/ifpmic/ccic/usbpd.h>
+#endif
+
 #ifndef __USBPD_H__
 #define __USBPD_H__
 
@@ -33,6 +37,7 @@
 #define tVDMWaitModeExit	(50)    /* 40~50  ms */
 #define tDiscoverIdentity	(50)	/* 40~50  ms */
 #define tSwapSourceStart        (20)	/* 20  ms */
+#define tTypeCSinkWaitCap       (600)	/* 310~620 ms */
 
 /* Protocol States */
 typedef enum {
@@ -312,6 +317,8 @@ typedef struct usbpd_phy_ops {
 	unsigned   (*get_status)(void *, unsigned);
 	bool   (*poll_status)(void *);
 	void   (*driver_reset)(void *);
+	int    (*set_otg_control)(void *, int);
+	int    (*set_cc_control)(void *, int);
 } usbpd_phy_ops_type;
 
 struct policy_data {
@@ -326,6 +333,8 @@ struct policy_data {
 	bool			plug_valid;
 	bool			modal_operation;
 	bool			abnormal_state;
+	bool			sink_cap_received;
+	bool			send_sink_cap;
 };
 
 struct protocol_data {
@@ -370,6 +379,9 @@ struct usbpd_manager_data {
 	int sink_min_volt;
 	int sink_max_power;
 
+	/* sink cap */
+	int sink_cap_max_volt;
+
 	/* power role swap*/
 	bool power_role_swap;
 	/* data role swap*/
@@ -392,6 +404,8 @@ struct usbpd_data {
 	struct policy_data	policy;
 	msg_header_type		source_msg_header;
 	data_obj_type           source_data_obj;
+	msg_header_type		sink_msg_header;
+	data_obj_type           sink_data_obj[2];
 	data_obj_type		source_request_obj;
 	struct usbpd_manager_data	manager;
 	struct work_struct	worker;
@@ -463,5 +477,4 @@ extern unsigned usbpd_wait_msg(struct usbpd_data *pd_data, unsigned msg_status,
 		unsigned ms);
 extern void usbpd_reinit(struct device *);
 extern void usbpd_init_protocol(struct usbpd_data *);
-
 #endif
