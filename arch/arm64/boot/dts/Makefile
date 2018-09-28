@@ -1,9 +1,10 @@
-dtb-$(CONFIG_ARCH_THUNDER) += thunder-88xx.dtb
-dtb-$(CONFIG_ARCH_VEXPRESS) += rtsm_ve-aemv8a.dtb foundation-v8.dtb
-dtb-$(CONFIG_ARCH_XGENE) += apm-mustang.dtb
-dtb-$(CONFIG_SOC_EXYNOS8890) += exynos8890-espresso8890.dtb exynos8890-espresso8890_rev01.dtb exynos8890-universal8890.dtb exynos8890-smdk8890.dtb
-dtb-$(CONFIG_SOC_EXYNOS8890) += exynos8890-evt1-smdk8890.dtb
-dtb-$(CONFIG_SOC_EXYNOS7870) += exynos7870-smdk7870.dtb exynos7870-universal7870.dtb exynos7870-universal7870_rev01.dtb
+dtb-$(CONFIG_MACH_EXYNOS7870_A3XPREMIUMLTE_JPN_DCM) := \
+	exynos7870-a3xpremiumlte_jpn_dcm_02.dtb \
+	exynos7870-a3xpremiumlte_jpn_dcm_03.dtb \
+	exynos7870-a3xpremiumlte_jpn_dcm_04.dtb \
+	exynos7870-a3xpremiumlte_jpn_dcm_05.dtb \
+	exynos7870-a3xpremiumlte_jpn_dcm_06.dtb \
+	exynos7870-a3xpremiumlte_jpn_dcm_07.dtb
 
 targets += dtbs
 

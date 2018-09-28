@@ -11,6 +11,19 @@ if ARCH_EXYNOS
 
 menu "SAMSUNG EXYNOS SoCs Support"
 
+choice
+	prompt "Exynos device target"
+	default MACH_EXYNOS7870_NONE
+
+config MACH_EXYNOS7870_NONE
+	bool "None"
+
+config MACH_EXYNOS7870_A3XPREMIUMLTE_JPN_DCM
+	bool "Galaxy Feel (SM-A310D)"
+	select EXYNOS_DTBTOOL
+
+endchoice
+
 config SKIP_HW_BREAKPOINT
 	bool "support skip hw breakpoint"
 	default n
