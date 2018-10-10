@@ -798,9 +798,13 @@ static int cod3026x_mute_mic(struct snd_soc_codec *codec, bool on)
 	if (on) {
 		mutex_lock(&cod3026x->adc_mute_lock);
 		cod3026x_adc_digital_mute(codec, true);
+		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
+				PDB_MIC_BST3_MASK, 0);
 		mutex_unlock(&cod3026x->adc_mute_lock);
 	} else {
 		mutex_lock(&cod3026x->adc_mute_lock);
+		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
+				PDB_MIC_BST3_MASK, PDB_MIC_BST3_MASK);
 		cod3026x_adc_digital_mute(codec, false);
 		mutex_unlock(&cod3026x->adc_mute_lock);
 	}
