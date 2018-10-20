@@ -37,12 +37,6 @@ on init
 
     ffu
 
-# [ SEC_SELINUX_PORTING_COMMON
-    # for audit message
-    chown system system /proc/avc_msg
-    chmod 0660 /proc/avc_msg
-# ] SEC_SELINUX_PORTING_COMMON
-
     # Mix device-specific information into the entropy pool
     copy /proc/cmdline /dev/urandom
     copy /default.prop /dev/urandom
@@ -481,13 +475,6 @@ on post-fs
     mkdir /data/misc/vpnclientd 0770 system system
 
 on post-fs-data
-# [ SEC_SELINUX_PORTING_COMMON
-    # Reload SE Android Policy
-    setprop selinux.reload_policy 1
-
-    # sec_efs_file
-    mkdir /efs/sec_efs 0775 radio system
-# ] SEC_SELINUX_PORTING_COMMON
     # SELinux Settings (0 = Permissive / 1 = Enforcing)
     setenforce 0
     SELINUX=permissive
@@ -620,13 +607,6 @@ on post-fs-data
     chown system system /sys/class/mstldo/mst_drv/mfc
     chmod 0770 /sys/class/mstldo/mst_drv/mfc
 
-# [ SEC_SELINUX_PORTING_COMMON
-    mkdir /data/misc/audit 0775 audit system
-
-    # start auditd
-    start auditd
-# ] SEC_SELINUX_PORTING_COMMON
-
     # ATT CIQ
     mkdir /data/iq_archive 0771 system system
     mkdir /data/iq_archive/packages 0771 system system
@@ -666,11 +646,6 @@ on post-fs-data
     mkdir /data/mediadrm 0770 mediadrm mediadrm
 
     mkdir /data/anr 0775 system system
-
-# [ SEC_SELINUX_PORTING_COMMON
-    # Separate location for storing security policy files on data
-    mkdir /data/security 0700 system system
-# ] SEC_SELINUX_PORTING_COMMON
 
     # Create all remaining /data root dirs so that they are made through init
     # and get proper encryption policy installed
@@ -738,22 +713,11 @@ on post-fs-data
 
     init_user0
 
-# [ SEC_SELINUX_PORTING_COMMON
-    # reload_policy is move to above
-    # Reload policy from /data/security if present.
-    #setprop selinux.reload_policy 1
-# ] SEC_SELINUX_PORTING_COMMON
-
     # Set SELinux security contexts on upgrade or policy update.
     restorecon_recursive /data
 
     # Check any timezone data in /data is newer than the copy in /system, delete if not.
     exec - system system -- /system/bin/tzdatacheck /system/usr/share/zoneinfo /data/misc/zoneinfo
-
-# [ SEC_SELINUX_PORTING_COMMON
-    restorecon -R /efs
-    restorecon -R /carrier
-# ] SEC_SELINUX_PORTING_COMMON
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -1439,21 +1403,6 @@ service mobicore /system/bin/mcDriverDaemon -r /system/app/FFFFFFFF0000000000000
 service flash_recovery /system/bin/install-recovery.sh
     class main
     oneshot
-
-# [ SEC_SELINUX_PORTING_COMMON
-service auditd /system/bin/auditd -k
-    class main
-    seclabel u:r:auditd:s0
-    disabled
-    oneshot
-
-on property:selinux.sec.restorecon=1
-    restorecon_data_force /data
-
-# Reload SE Android Policy for MDM
-on property:persist.security.mdm.policy=1
-    setprop selinux.reload_policy 1
-# ] SEC_SELINUX_PORTING_COMMON
 
 # bootchecker
 service bootchecker /system/bin/bootchecker
