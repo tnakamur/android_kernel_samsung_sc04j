@@ -233,6 +233,7 @@ media.msm8956.version      u:object_r:media_msm8956_version_prop:s0
 #crash detection property
 sys.crash.detect			u:object_r:detect_prop:s0
 persist.crash.cnt			u:object_r:detect_prop:s0
+
 #line 1 "out/target/product/a3xpremiumltedcm/obj/ETC/sectxfile_nl_intermediates/sectxfile_nl"
 
 #line 1 "vendor/samsung/system/sepolicy/BSP/qcom_bsp/msm8996/property_contexts"
