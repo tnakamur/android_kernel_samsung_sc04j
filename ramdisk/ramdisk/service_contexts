@@ -278,6 +278,7 @@ application_policy                          u:object_r:EDM_Policy_service:s0
 apppermission_control_policy                u:object_r:EDM_Policy_service:s0
 AAS                                         u:object_r:AAS_service:s0
 ABTPersistenceService                       u:object_r:abt_persistence_service:s0
+android.samsung.IRemosaicDaemon             u:object_r:remosaicd_service:s0
 AODManagerService                           u:object_r:aod_manager_service:s0
 ApexService                                 u:object_r:apexserver_service:s0
 barbeam                                     u:object_r:barbeam_service:s0
@@ -327,6 +328,7 @@ com.samsung.android.jam.IAPAClientOboe      u:object_r:apaservice_service:s0
 com.samsung.android.jam.IAPAService         u:object_r:apaservice_service:s0
 com.samsung.android.jam.IJackService        u:object_r:jackservice_service:s0
 com.samsung.android.pass.IPassService       u:object_r:platform_app_service:s0
+com.samsung.android.ifaaservice.IIfaaService          u:object_r:ifaaservice_service:s0
 # SEA_site N OS#395 ,board/N_review_request/view/21598999    tigerservice (com.samsung.srk.tigerkeystoreprovider.ITigerService)
 # add TigerService permission requested by  Multimedia TG (th0228.kim)
 com.samsung.srk.tigerkeystoreprovider.ITigerService               u:object_r:tigerservice_service:s0
@@ -407,6 +409,13 @@ gamemanager                                 u:object_r:gamemanager_service:s0
 generic_vpn_policy                          u:object_r:EDM_Policy_service:s0
 genericssoservice                           u:object_r:genericsso_service:s0
 geofencing                                  u:object_r:geofencing_service:s0
+
+# GameSDKService
+# http://mobilerndhub.sec.samsung.net/hub/site/seandroid/board/N_review_request/view/22142783
+# requester : steeze.kim
+# GameSDKService
+gamesdk                                     u:object_r:gamesdk_service:s0
+
 # SEA_site_N_OS #33, name changed (nfccontroller -> gsmaapi)
 gsmaapi                                     u:object_r:nfc_service:s0
 harmony_eas_service                         u:object_r:harmony_eas_service:s0
@@ -454,6 +463,7 @@ lpnet                                       u:object_r:lpnet_service:s0
 LSManager                                   u:object_r:LSManager_service:s0
 magazinecardservice                         u:object_r:magazinecard_service:s0
 mate_service                                u:object_r:mate_service:s0
+mdc_service                                 u:object_r:mdc_service:s0
 mdm.remotedesktop                           u:object_r:remotedesktop_service:s0
 mDNIe                                       u:object_r:mDNIe_service:s0
 media.air                                   u:object_r:visiond_service:s0
@@ -567,6 +577,8 @@ directpeninputmanagerservicerestricted      u:object_r:directpeninputmanager_ser
 directpeninputmanagerservicerestricted[0-9] u:object_r:directpeninputmanager_service:s0
 directpeninputmanagerservicerestricted10    u:object_r:directpeninputmanager_service:s0
 WlanDutService                              u:object_r:wlandutservice_service:s0
-
+TigerSskdsService                           u:object_r:TigerSskdsService_service:s0
+SCPMHelper                                  u:object_r:scpmhelper_service:s0
+IfaaService                                 u:object_r:IfaaService_service:s0
 #line 1 "out/target/product/a3xpremiumltedcm/obj/ETC/sectxfile_nl_intermediates/sectxfile_nl"
 
