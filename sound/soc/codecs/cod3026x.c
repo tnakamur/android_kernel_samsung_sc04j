@@ -798,13 +798,9 @@ static int cod3026x_mute_mic(struct snd_soc_codec *codec, bool on)
 	if (on) {
 		mutex_lock(&cod3026x->adc_mute_lock);
 		cod3026x_adc_digital_mute(codec, true);
-		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
-				PDB_MIC_BST3_MASK, 0);
 		mutex_unlock(&cod3026x->adc_mute_lock);
 	} else {
 		mutex_lock(&cod3026x->adc_mute_lock);
-		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
-				PDB_MIC_BST3_MASK, PDB_MIC_BST3_MASK);
 		cod3026x_adc_digital_mute(codec, false);
 		mutex_unlock(&cod3026x->adc_mute_lock);
 	}
@@ -2844,6 +2840,14 @@ static void cod3026x_buttons_work(struct work_struct *work)
 
 		dev_err(cod3026x->dev, ":key skipped. ADC %d\n", adc);
 	} else {
+		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
+				PDB_MIC_BST3_MASK, 0);
+
+		msleep(40);
+
+		snd_soc_update_bits(cod3026x->codec, COD3026X_12_PD_AD2,
+				PDB_MIC_BST3_MASK, PDB_MIC_BST3_MASK);
+
 		jd->button_det = false;
 		input_report_key(cod3026x->input, jd->button_code, 0);
 		input_sync(cod3026x->input);

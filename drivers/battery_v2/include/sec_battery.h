@@ -175,6 +175,8 @@ struct sec_battery_info {
 	bool is_sysovlo;
 	bool is_vbatovlo;
 
+	bool safety_timer_set;
+	bool lcd_status;
 	bool skip_swelling;
 
 	int status;
@@ -340,7 +342,6 @@ struct sec_battery_info {
 	/* MTBF test for CMCC */
 	bool is_hc_usb;
 
-	int r_siop_level;
 	int siop_level;
 	int siop_event;
 	int siop_prev_event;
@@ -350,18 +351,6 @@ struct sec_battery_info {
 	bool skip_chg_temp_check;
 	bool skip_wpc_temp_check;
 	bool wpc_temp_mode;
-#if defined(CONFIG_BATTERY_SWELLING_SELF_DISCHARGING)
-	bool factory_self_discharging_mode_on;
-	bool force_discharging;
-	bool self_discharging;
-	bool discharging_ntc;
-	int discharging_ntc_adc;
-	int self_discharging_adc;
-#endif
-#if defined(CONFIG_SW_SELF_DISCHARGING)
-	bool sw_self_discharging;
-	struct wake_lock self_discharging_wake_lock;
-#endif
 	bool charging_block;
 #if defined(CONFIG_BATTERY_SWELLING)
 	unsigned int swelling_mode;
@@ -397,8 +386,10 @@ struct sec_battery_info {
 	struct mutex batt_handlelock;
 	struct mutex current_eventlock;
 
-	unsigned long lcd_on_total_time;
-	unsigned long lcd_on_time;
+	bool stop_timer;
+	unsigned long prev_safety_time;
+	unsigned long expired_time;
+	unsigned long cal_safety_time;
 
 	bool block_water_event;
 };
@@ -512,16 +503,6 @@ enum {
 	BATT_INBAT_VOLTAGE,
 	BATT_INBAT_VOLTAGE_OCV,
 	BATT_INBAT_VOLTAGE_ADC,
-#if defined(CONFIG_BATTERY_SWELLING_SELF_DISCHARGING)
-	BATT_DISCHARGING_CHECK,
-	BATT_DISCHARGING_CHECK_ADC,
-	BATT_DISCHARGING_NTC,
-	BATT_DISCHARGING_NTC_ADC,
-	BATT_SELF_DISCHARGING_CONTROL,
-#endif
-#if defined(CONFIG_SW_SELF_DISCHARGING)
-	BATT_SW_SELF_DISCHARGING,
-#endif
 	CHECK_SLAVE_CHG,
 	BATT_INBAT_WIRELESS_CS100,
 	HMT_TA_CONNECTED,
@@ -580,6 +561,8 @@ enum {
 #endif
 	BATT_WDT_CONTROL,
 	BATT_SWELLING_CONTROL,
+	SAFETY_TIMER_SET,
+	SAFETY_TIMER_INFO,
 	MODE,
 	CHECK_PS_READY,
 	FACTORY_MODE_RELIEVE,
