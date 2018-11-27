@@ -4576,6 +4576,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 						__func__, battery->pdata->fuelgauge_name);
 			} else {
 				if (psy_fg->get_property != NULL) {
+#if defined(CONFIG_FUELGAUGE_ASOC_FROM_CYCLES)
+					value.intval = battery->batt_cycle;
+#endif
 					ret = psy_fg->get_property(psy_fg,
 							POWER_SUPPLY_PROP_ENERGY_FULL, &value);
 					if (ret < 0) {

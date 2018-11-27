@@ -210,9 +210,6 @@ static int request_send(u32 command, const struct mc_uuid_t *uuid, bool is_gp,
 	int counter = 10;
 	int ret = 0;
 
-	/* ExySp */
-	unsigned long timeout = msecs_to_jiffies(10 * 1000); /* 10 seconds */
-
 	/* Prepare request */
 	mutex_lock(&g_request.states_mutex);
 	/* Wait a little for daemon to connect */

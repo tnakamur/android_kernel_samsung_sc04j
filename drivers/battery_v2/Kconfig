@@ -61,6 +61,16 @@ config BATTERY_AGE_FORECAST_B2B
 	help
 	Say Y to use battery age forecast for B2B
 
+config FUELGAUGE_ASOC_FROM_CYCLES
+	bool "FUELGAUGE ASOC output based on mapping with battery cycles"
+	default n
+	depends on BATTERY_AGE_FORECAST
+	help
+	 Say Y to enable support for the mapping of ASOC with charging cycles.
+	 Support for this feature implies that a mapping table has been shared
+	 from HW team and big data side. This feature is providing
+	 support for platform required battery health monitoring concepts.
+
 config DCM_JPN_CONCEPT_FG_CYCLE_CHECK
 	bool "enable fg_cycle_check_value for dcm jpn"
 	default n
