@@ -412,9 +412,13 @@ static void ext4_handle_error(struct super_block *sb, char* buf)
 		smp_wmb();
 		sb->s_flags |= MS_RDONLY;
 	}
-	if (test_opt(sb, ERRORS_PANIC))
-		panic("EXT4-fs (device %s): panic! %s\n",
-			sb->s_id, buf?buf:"no message");
+	if (test_opt(sb, ERRORS_PANIC)) {
+		if (EXT4_SB(sb)->s_journal &&
+		  !(EXT4_SB(sb)->s_journal->j_flags & JBD2_REC_ERR))
+			return;
+		panic("EXT4-fs (device %s): panic forced after error\n",
+			sb->s_id);
+	}
 }
 
 #define ext4_error_ratelimit(sb)					\
