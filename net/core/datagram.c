@@ -143,7 +143,7 @@ static struct sk_buff *skb_set_peeked(struct sk_buff *skb)
 
 	nskb = skb_clone(skb, GFP_ATOMIC);
 	if (!nskb)
-		return ERR_PTR(-ENOMEM);;
+		return ERR_PTR(-ENOMEM);
 
 	skb->prev->next = nskb;
 	skb->next->prev = nskb;
