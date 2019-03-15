@@ -1,0 +1,46 @@
+on init
+#carrier
+	export PHONEBOOK_EXCHANGE_PKG_DOCOMO "com.samsung.android.exchange"
+    setprop ro.phonemotion.parameter.path /system/etc/parameter.txt
+
+
+on post-fs-data	
+# JPN: For MobileTV [ISDBT/SBTVD]
+    mkdir /data/one-seg 0775 system system
+    chown system system /data/one-seg
+    chmod 0775 /data/one-seg
+
+# FeliCaLock
+    mkdir /efs/sec_efs/FeliCaLock 0770 system oem_5504
+    chmod 0770 /efs/sec_efs/FeliCaLock
+    chown system oem_5504 /efs/sec_efs/FeliCaLock
+    chown oem_5504 oem_5504 /efs/sec_efs/FeliCaLock/01
+    chown oem_5504 oem_5504 /efs/sec_efs/FeliCaLock/02
+    chown oem_5504 oem_5504 /efs/sec_efs/FeliCaLock/03
+
+# Japan Add NFC Type Setting (Osaifu.cfg)
+    mkdir /data/misc/osaifu 0775 nfc system
+    copy /system/etc/osaifu/osaifu.cfg /data/misc/osaifu/osaifu.cfg
+    chmod 664 /data/misc/osaifu/osaifu.cfg
+    chown nfc system /data/misc/osaifu/osaifu.cfg
+
+# NFC KEY
+    mkdir /data/nfc_log 0750 nfc system
+    copy /system/etc/nfc_key /data/nfc/Key
+    chmod 660 /data/nfc/Key
+    chown nfc nfc /data/nfc/Key
+
+# GNSS SUPL IOT for JPN DCM
+    setprop dcm_supl_iot true
+	
+on boot
+# JPN: For MobileTV [ISDBT] should be in on boot
+service SDtvService /system/bin/SDtvService
+    class main
+    user system
+    group system audio sdcard_rw shell media media_rw oem_5432
+
+on post-fs
+# Permissions for ISDBT/SBTVD tuner
+    chown system system /dev/isdbt
+    chmod 0660 /dev/isdbt
